@@ -1,0 +1,33 @@
+# 统一换行:仓库内一律 LF,检出时按下面的规则处理
+* text=auto
+
+# Windows 批处理必须是 CRLF,否则 cmd 解析 for / goto 等结构会报错
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 源码与文本文件:统一 LF(仓库内与检出后都是 LF)
+*.js  text eol=lf
+*.vue text eol=lf
+*.m   text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.gitignore text eol=lf
+*.gitattributes text eol=lf
+
+# 二进制文件:不做换行或文本合并处理
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.dem binary
+*.xlsx binary
+*.docx binary
+*.pdf binary
+
+# 语言统计(可选):把生成产物排除在 GitHub 语言统计之外
+frontend/dist/** linguist-generated=true
+backend/data/** linguist-generated=true

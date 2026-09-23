@@ -1,0 +1,31 @@
+# ===== 依赖与构建产物 =====
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# ===== 运行时数据(不含源码,可由平台运行重新生成)=====
+# data/ 下包含:
+#   sources.json   已注册数据源(记录的是本机绝对路径,换机器无效)
+#   cache/         生成的 PNG 图片缓存(可重画)
+#   jobs/          MATLAB 任务调试记录
+#   exports/       导出的 zip 压缩包
+#   backend.log    运行日志
+backend/data/*
+!backend/data/.gitkeep
+
+# ===== 本机配置 =====
+# config.json 含本机 MATLAB 安装路径,不入库;
+# 新环境请复制 config.example.json 为 config.json 后按需修改(不修改也能用默认值启动)
+backend/config.json
+
+# ===== 日志与系统文件 =====
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 编辑器 =====
+.vscode/
+.idea/
+*.swp

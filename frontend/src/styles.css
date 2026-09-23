@@ -1,0 +1,175 @@
+:root {
+  --brand: #1f6feb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  background: #f5f7fa;
+  color: #1f2328;
+}
+
+.page {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 16px 20px 40px;
+}
+
+.muted {
+  color: #8a9099;
+  font-size: 12px;
+}
+
+.mono {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+}
+
+/* 图片网格 */
+.figure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.figure-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.2s;
+}
+
+.figure-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.figure-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fafbfc;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.figure-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.figure-card__body {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+
+.figure-card__body img {
+  width: 100%;
+  display: block;
+  cursor: zoom-in;
+}
+
+.figure-card__placeholder {
+  padding: 40px 12px;
+  text-align: center;
+  color: #a8adb5;
+  font-size: 13px;
+}
+
+.figure-card__error {
+  padding: 20px 14px;
+  color: #d03050;
+  font-size: 12px;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.tag-layer {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: #eef4ff;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tag-type {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: #f0f0f0;
+  color: #555;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 对比页网格 */
+.compare-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.compare-table th,
+.compare-table td {
+  border-right: 1px solid #eceff3;
+  border-bottom: 1px solid #eceff3;
+  padding: 8px;
+  vertical-align: top;
+}
+
+.compare-table thead th {
+  background: #fafbfc;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.compare-table tbody th {
+  background: #fafbfc;
+  font-size: 13px;
+  text-align: center;
+  width: 90px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.compare-table td {
+  min-width: 320px;
+}
+
+.compare-cell__label {
+  font-size: 12px;
+  color: #8a9099;
+  margin-bottom: 6px;
+}
+
+.compare-cell__label b {
+  color: #1f2328;
+}
