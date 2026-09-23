@@ -13,6 +13,9 @@ frontend/dist/
 backend/data/*
 !backend/data/.gitkeep
 
+# ===== 文档产物 =====
+/docs/
+
 # ===== 本机配置 =====
 # config.json 含本机 MATLAB 安装路径,不入库;
 # 新环境请复制 config.example.json 为 config.json 后按需修改(不修改也能用默认值启动)
