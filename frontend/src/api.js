@@ -27,10 +27,12 @@ export const listDrives = () => req('/fs/drives');
 export const listDir = (path) => req(`/fs/list?path=${encodeURIComponent(path)}`);
 
 // requests: [{ sourceId, dataType, layers: ['ground','10m'] | ['all'] }]
-export const plot = (requests, dryRun = false) =>
-  req('/plot', { method: 'POST', body: JSON.stringify({ requests, dryRun }) });
+// options:  { coordMode: 'abs' | 'rel-ll' | 'rel-center' }
+export const plot = (requests, dryRun = false, options = {}) =>
+  req('/plot', { method: 'POST', body: JSON.stringify({ requests, dryRun, options }) });
 export const getJob = (id) => req(`/jobs/${id}`);
-export const exportZip = (requests) => req('/export', { method: 'POST', body: JSON.stringify({ requests }) });
+export const exportZip = (requests, options = {}) =>
+  req('/export', { method: 'POST', body: JSON.stringify({ requests, options }) });
 
 export const imageUrl = (fig, download = false, version = 0) => {
   const params = [];

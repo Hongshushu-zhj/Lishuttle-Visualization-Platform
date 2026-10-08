@@ -55,6 +55,9 @@
 
       <!-- 右侧:各数据源绘图区 -->
       <el-col :span="19">
+        <div v-if="state.sources.length" class="display-bar">
+          <CoordModeSelect v-model="coordMode" />
+        </div>
         <el-empty
           v-if="state.sources.length === 0"
           description="请先在左侧添加结果文件夹"
@@ -64,6 +67,7 @@
           v-for="s in state.sources"
           :key="s.id + '-' + s.scanVersion"
           :source="s"
+          :coord-mode="coordMode"
           style="margin-bottom: 18px"
         />
       </el-col>
@@ -80,8 +84,10 @@ import { FolderAdd, Folder, Refresh, Delete } from '@element-plus/icons-vue';
 import { state, addSource, removeSource, refreshSource, knownTypes } from '../store';
 import FolderPicker from '../components/FolderPicker.vue';
 import SourceSection from '../components/SourceSection.vue';
+import CoordModeSelect from '../components/CoordModeSelect.vue';
 
 const picker = ref(null);
+const coordMode = ref('abs');
 
 async function onPick(path) {
   try {
@@ -121,6 +127,17 @@ async function doRemove(s) {
 .side-card {
   position: sticky;
   top: 12px;
+}
+
+.display-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
 }
 
 .side-head {

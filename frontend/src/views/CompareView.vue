@@ -96,6 +96,12 @@
         </el-col>
       </el-row>
 
+      <el-row :gutter="16" style="margin-top: 4px">
+        <el-col :span="24">
+          <CoordModeSelect v-model="coordMode" />
+        </el-col>
+      </el-row>
+
       <el-alert
         v-if="state.sources.length < 2"
         type="info"
@@ -207,10 +213,12 @@ import * as api from '../api';
 import { state, addSource, knownTypes } from '../store';
 import FigureCard from '../components/FigureCard.vue';
 import FolderPicker from '../components/FolderPicker.vue';
+import CoordModeSelect from '../components/CoordModeSelect.vue';
 
 const picker = ref(null);
 const selectedSourceIds = ref([]);
 const dataType = ref('');
+const coordMode = ref('abs');
 const selectedLayers = ref([]);
 const includePartial = ref(false);
 const cells = ref([]);
@@ -340,7 +348,7 @@ async function refreshGrid(dryRun = true) {
   }
   if (dryRun) {
     try {
-      const r = await api.plot(buildRequests(), true);
+      const r = await api.plot(buildRequests(), true, { coordMode: coordMode.value });
       cells.value = r.figures;
     } catch (e) {
       cells.value = [];
@@ -357,7 +365,7 @@ async function run() {
   elapsed.value = 0;
   elapsedTimer = setInterval(() => (elapsed.value = Math.round((Date.now() - t0) / 1000)), 1000);
   try {
-    const r = await api.plot(buildRequests());
+    const r = await api.plot(buildRequests(), false, { coordMode: coordMode.value });
     cells.value = r.figures;
     if (!r.jobId) {
       progress.value = { done: r.figures.length, total: r.figures.length, status: 'done' };
@@ -422,7 +430,7 @@ function clearTimers() {
 
 async function exportAll() {
   try {
-    const r = await api.exportZip(buildRequests());
+    const r = await api.exportZip(buildRequests(), { coordMode: coordMode.value });
     if (r.count < r.requested) {
       ElMessage.warning(`已导出 ${r.count} 张(${r.requested} 张中还有未绘制的)`);
     } else {
@@ -471,6 +479,8 @@ watch(dataType, () => {
 });
 
 watch([selectedLayers, includePartial], () => refreshGrid(), { deep: true });
+// 坐标显示方式变化:重新查询该口径下的已生成图
+watch(coordMode, () => refreshGrid());
 </script>
 
 <style scoped>

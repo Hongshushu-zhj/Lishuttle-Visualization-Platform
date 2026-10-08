@@ -10,6 +10,7 @@ const cache = require('./cache');
 const exporter = require('./exporter');
 const { listDrives, listDir } = require('./fsBrowse');
 const { GROUND_LAYER, typeInfo, displayLabel, layerLabel } = require('./plotTypes');
+const { normalizeCoordMode, unionRange, variantFor } = require('./renderOptions');
 
 const router = express.Router();
 
@@ -49,11 +50,33 @@ function buildFigures(requests) {
         layer,
         preddir: source.scan.predDir,
         demFile,
+        bounds: type.bounds,
         pngFile: cache.pngPath(source.id, req.dataType, layer),
         url: `/api/images/${source.id}/${req.dataType}/${layer === GROUND_LAYER ? 'ground' : layer}.png`,
         status: 'pending',
       });
     }
+  }
+  return figures;
+}
+
+// 给一批 figure 套用渲染选项:
+//   1) 统一坐标范围:取本批所有图范围的并集,保证同一批图坐标轴一致(跨源对比必需)
+//   2) 坐标显示方式:绝对 UTM / 相对坐标
+// 结果写入每张图的 xlim/ylim/coordMode/pngFile/url,variant 用于区分不同渲染口径的缓存
+function applyRenderOptions(figures, coordMode) {
+  const mode = normalizeCoordMode(coordMode);
+  const unified = unionRange(figures);
+  for (const f of figures) {
+    f.coordMode = mode;
+    if (unified) {
+      f.xlim = [unified.left, unified.right];
+      f.ylim = [unified.bottom, unified.top];
+    }
+    f.variant = variantFor(f, unified, mode);
+    f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant);
+    const file = cache.layerFileName(f.layer, f.variant);
+    f.url = `/api/images/${f.sourceId}/${f.dataType}/${file}`;
   }
   return figures;
 }
@@ -146,9 +169,12 @@ router.post('/sources/:id/refresh', (req, res) => {
 // ---------- 绘图 ----------
 router.post('/plot', (req, res) => {
   try {
-    const figures = buildFigures(req.body.requests);
+    const coordMode = (req.body.options && req.body.options.coordMode) || 'abs';
+    const figures = applyRenderOptions(buildFigures(req.body.requests), coordMode);
     for (const f of figures) {
-      f.status = cache.isCached(f.sourceId, f.dataType, f.layer, f.demFile) ? 'cached' : 'pending';
+      f.status = cache.isCached(f.sourceId, f.dataType, f.layer, f.demFile, f.variant)
+        ? 'cached'
+        : 'pending';
     }
     // dryRun:只返回已有图片的清单,不启动 MATLAB(切换类型/高度层时预览已画好的图)
     const dryRun = !!req.body.dryRun;
@@ -180,8 +206,10 @@ router.get('/jobs/:id', (req, res) => {
 // ---------- 图片 ----------
 router.get('/images/:sourceId/:dataType/:file', (req, res) => {
   const { sourceId, dataType, file } = req.params;
-  const layer = file.replace(/\.png$/i, '');
-  const p = cache.pngPath(sourceId, dataType, layer);
+  const parsed = cache.parseLayerFile(file);
+  if (!parsed) return res.status(400).json({ error: `图片名不合法: ${file}` });
+  const { layer, variant } = parsed;
+  const p = cache.pngPath(sourceId, dataType, layer, variant);
   if (!fs.existsSync(p)) return res.status(404).json({ error: '图片不存在,请先绘图' });
   // ?download=1 时以下载方式返回,文件名带来源/类型/高度层
   if (req.query.download) {
@@ -195,8 +223,12 @@ router.get('/images/:sourceId/:dataType/:file', (req, res) => {
 // ---------- 导出 ----------
 router.post('/export', async (req, res) => {
   try {
-    const figures = buildFigures(req.body.requests);
-    const available = figures.filter((f) => cache.isCached(f.sourceId, f.dataType, f.layer, f.demFile));
+    // 必须与 /plot 使用同一套渲染选项(否则会指向不同口径的缓存文件)
+    const coordMode = (req.body.options && req.body.options.coordMode) || 'abs';
+    const figures = applyRenderOptions(buildFigures(req.body.requests), coordMode);
+    const available = figures.filter((f) =>
+      cache.isCached(f.sourceId, f.dataType, f.layer, f.demFile, f.variant)
+    );
     if (available.length === 0) return res.status(400).json({ error: '没有已生成的图片,请先绘图' });
     const { zipId, zipFile, done } = exporter.createZip(
       available.map((f) => ({

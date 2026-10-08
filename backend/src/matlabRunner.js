@@ -20,6 +20,10 @@ function runMatlabJob(job, figures, onFigureDone, onFigureError) {
       dataType: f.dataType,
       layer: f.layer === GROUND_LAYER ? '' : f.layer,
       outFile: f.pngFile,
+      // 统一坐标范围(同一批图一致)与坐标显示方式,由 plot_dispatch.m 应用
+      xlim: f.xlim || null,
+      ylim: f.ylim || null,
+      coordMode: f.coordMode || 'abs',
     }));
     fs.writeFileSync(jobFile, JSON.stringify({ figures: taskFigures }));
 

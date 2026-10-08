@@ -131,6 +131,7 @@ import FigureCard from './FigureCard.vue';
 
 const props = defineProps({
   source: { type: Object, required: true },
+  coordMode: { type: String, default: 'abs' },
 });
 
 const allTypes = computed(() => {
@@ -195,7 +196,11 @@ async function loadCached() {
     return;
   }
   try {
-    const r = await api.plot([{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }], true);
+    const r = await api.plot(
+      [{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }],
+      true,
+      { coordMode: props.coordMode }
+    );
     figures.value = r.figures;
   } catch (e) {
     figures.value = [];
@@ -213,9 +218,11 @@ async function startPlot() {
     elapsed.value = Math.round((Date.now() - startedAt.value) / 1000);
   }, 1000);
   try {
-    const r = await api.plot([
-      { sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value },
-    ]);
+    const r = await api.plot(
+      [{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }],
+      false,
+      { coordMode: props.coordMode }
+    );
     figures.value = r.figures;
     if (!r.jobId) {
       // 全部命中缓存
@@ -291,9 +298,10 @@ function clearTimers() {
 
 async function exportAll() {
   try {
-    const r = await api.exportZip([
-      { sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value },
-    ]);
+    const r = await api.exportZip(
+      [{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }],
+      { coordMode: props.coordMode }
+    );
     if (r.count < r.requested) {
       ElMessage.warning(`已导出 ${r.count} 张(${r.requested} 张中还有 ${r.requested - r.count} 张未绘图)`);
     } else {
@@ -318,6 +326,8 @@ watch(dataType, async () => {
   await loadCached();
 });
 watch(selectedLayers, loadCached, { deep: true });
+// 坐标显示方式变化后,重新查询该口径下已生成的图(未生成的会显示为待绘图)
+watch(() => props.coordMode, loadCached);
 
 onMounted(async () => {
   resetForType();

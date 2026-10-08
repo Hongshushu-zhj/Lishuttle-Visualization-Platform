@@ -85,12 +85,35 @@ end
 if isempty(meta.unit)
     titleText = sprintf('%s @ %s', dataType, layerText);
 else
-    titleText = sprintf('%s (%s) @ %s', dataType, meta.unit, layerText);
+    titleText = sprintf('%s (%s) @ %s', dataType, layerText);
 end
 if ~isempty(srcName)
     titleText = sprintf('%s · %s', titleText, srcName);
 end
 title(gca, titleText, 'FontName', titleFont(), 'FontSize', 13, 'FontWeight', 'bold');
+
+% ---- 坐标轴统一处理 ----
+ax = gca;
+
+% 1) 统一坐标范围:同一批次的所有图使用同一范围,跨源对比时坐标轴严格一致
+if isfield(fig, 'xlim') && ~isempty(fig.xlim) && numel(fig.xlim) == 2
+    xlim(ax, [fig.xlim(1), fig.xlim(2)]);
+end
+if isfield(fig, 'ylim') && ~isempty(fig.ylim) && numel(fig.ylim) == 2
+    ylim(ax, [fig.ylim(1), fig.ylim(2)]);
+end
+
+% 2) 等比例锁定:让图上 x/y 方向的比例与真实米数一致(否则图面量距会偏 ~8%)
+daspect(ax, [1 1 1]);
+
+% 3) 坐标显示方式:绝对 UTM(默认)或相对坐标
+coordMode = 'abs';
+if isfield(fig, 'coordMode') && ~isempty(fig.coordMode)
+    coordMode = char(fig.coordMode);
+end
+if ~strcmp(coordMode, 'abs')
+    applyRelativeTicks(ax, coordMode);
+end
 
 outDir = fileparts(outFile);
 if ~isempty(outDir) && ~isfolder(outDir)
@@ -98,6 +121,60 @@ if ~isempty(outDir) && ~isfolder(outDir)
 end
 exportgraphics(gcf, outFile, 'Resolution', 150);
 close(gcf);
+end
+
+% ------------------------------------------------------------------
+function applyRelativeTicks(ax, mode)
+% 把刻度标签改写成相对坐标(原点取区域左下角或中心),并在坐标轴标题里注明原点,
+% 便于报告阅读;轴范围本身保持绝对 UTM 不变(不影响与 GIS/工参叠加的几何关系)。
+xl = xlim(ax);  yl = ylim(ax);
+switch mode
+    case 'rel-ll'      % 相对左下角
+        ox = xl(1);  oy = yl(1);
+        originText = sprintf('原点 = 区域左下角 UTM(%.0f, %.0f)', ox, oy);
+    case 'rel-center'  % 相对中心
+        ox = mean(xl);  oy = mean(yl);
+        originText = sprintf('原点 = 区域中心 UTM(%.0f, %.0f)', ox, oy);
+    otherwise
+        return;
+end
+
+stepX = niceStep(xl(2) - xl(1));
+stepY = niceStep(yl(2) - yl(1));
+set(ax, 'XTick', makeTicks(xl, ox, stepX), 'XTickLabel', tickLabels(xl, ox, stepX));
+set(ax, 'YTick', makeTicks(yl, oy, stepY), 'YTickLabel', tickLabels(yl, oy, stepY));
+xlabel(ax, sprintf('X 相对距离(m)  [%s]', originText), 'FontName', 'times new roman', 'FontSize', 12);
+ylabel(ax, 'Y 相对距离(m)', 'FontName', 'times new roman', 'FontSize', 12);
+end
+
+% 取"整"的刻度间隔(1/2/2.5/5 × 10^n 中最接近 目标间隔 的值)
+function step = niceStep(span)
+raw = span / 7;
+p = 10 ^ floor(log10(raw));
+candidates = [1 2 2.5 5 10] * p;
+[~, idx] = min(abs(candidates - raw));
+step = candidates(idx);
+end
+
+function ticks = makeTicks(limits, origin, step)
+first = ceil((limits(1) - origin) / step);
+last = floor((limits(2) - origin) / step);
+ticks = origin + (first:last) * step;
+end
+
+function labels = tickLabels(limits, origin, step)
+ticks = makeTicks(limits, origin, step);
+labels = arrayfun(@(v) formatTick(v - origin), ticks, 'UniformOutput', false);
+end
+
+function s = formatTick(v)
+if abs(v) >= 100
+    s = sprintf('%.0f', v);
+elseif abs(v) >= 10
+    s = sprintf('%.0f', v);
+else
+    s = sprintf('%.3g', v);
+end
 end
 
 % ------------------------------------------------------------------
