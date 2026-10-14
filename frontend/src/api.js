@@ -22,6 +22,8 @@ export const listSources = () => req('/sources');
 export const addSource = (path) => req('/sources', { method: 'POST', body: JSON.stringify({ path }) });
 export const deleteSource = (id) => req(`/sources/${id}`, { method: 'DELETE' });
 export const refreshSource = (id) => req(`/sources/${id}/refresh`, { method: 'POST' });
+export const openResultsFolder = (id, dataType = '') =>
+  req(`/sources/${id}/open-results`, { method: 'POST', body: JSON.stringify({ dataType }) });
 
 export const listDrives = () => req('/fs/drives');
 export const listDir = (path) => req(`/fs/list?path=${encodeURIComponent(path)}`);

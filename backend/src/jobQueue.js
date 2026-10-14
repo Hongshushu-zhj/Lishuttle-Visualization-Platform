@@ -56,7 +56,7 @@ class JobQueue {
           f.status = 'done';
           job.done++;
           try {
-            cache.markCached(f.sourceId, f.dataType, f.layer, f.demFile);
+            cache.markCached(f.sourceId, f.dataType, f.layer, f.demFile, f.variant, f.axes || null);
           } catch (e) {
             // 缓存标记失败不影响绘图结果本身
           }
@@ -65,6 +65,10 @@ class JobQueue {
           pending[idx].status = 'failed';
           pending[idx].error = msg;
           job.failed++;
+        },
+        (idx, axes) => {
+          // 记录实际坐标范围,便于核对"同一批图是否统一范围"
+          pending[idx].axes = axes;
         }
       );
       job.status = 'done';

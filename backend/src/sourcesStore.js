@@ -45,7 +45,13 @@ class SourcesStore {
       path: casePath,
       name: path.basename(casePath),
       addedAt: existing ? existing.addedAt : new Date().toISOString(),
-      scan: { utm: scan.utm, predDir: scan.predDir, types: scan.types },
+      scan: {
+        utm: scan.utm,
+        indoor: !!scan.indoor,
+        wallsFile: scan.wallsFile || null,
+        predDir: scan.predDir,
+        types: scan.types,
+      },
     };
     if (existing) this.sources[this.sources.indexOf(existing)] = record;
     else this.sources.push(record);
@@ -56,7 +62,13 @@ class SourcesStore {
   updateScan(id, scan) {
     const s = this.get(id);
     if (!s) return null;
-    s.scan = { utm: scan.utm, predDir: scan.predDir, types: scan.types };
+    s.scan = {
+      utm: scan.utm,
+      indoor: !!scan.indoor,
+      wallsFile: scan.wallsFile || null,
+      predDir: scan.predDir,
+      types: scan.types,
+    };
     this.save();
     return s;
   }

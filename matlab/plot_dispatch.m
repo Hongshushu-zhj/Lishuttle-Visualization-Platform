@@ -35,11 +35,13 @@ n = numel(figures);
 for i = 1:n
     fig = figures{i};
     try
-        renderOne(fig);
+        renderOne(fig, i);
         fprintf('PROGRESS %d/%d\n', i, n);
     catch err
         msg = strrep(err.message, newline, ' ');
         fprintf('FIGURE_ERROR %d %s\n', i, msg);
+        % 详细堆栈写到 stderr,便于后端把失败原因透传给前端排查
+        fprintf(2, '--- 第 %d 张图失败详情 ---\n%s\n', i, getReport(err, 'extended', 'hyperlinks', 'off'));
         try
             close all;
         catch
@@ -50,49 +52,76 @@ fprintf('DONE\n');
 end
 
 % ------------------------------------------------------------------
-function renderOne(fig)
+function renderOne(fig, figIndex)
 preddir = char(fig.preddir);
 dataType = upper(char(fig.dataType));
 layer = '';
 if isfield(fig, 'layer') && ~isempty(fig.layer)
     layer = char(fig.layer);
 end
+layerLabel = '';
+if isfield(fig, 'layerLabel') && ~isempty(fig.layerLabel)
+    layerLabel = char(fig.layerLabel);
+end
 outFile = char(fig.outFile);
 
+% 来源文件夹名(用于标题标注):.../<源名>/pred/0
+[~, srcName] = fileparts(fileparts(fileparts(preddir)));
+
+% 标题:数据类型 (单位) @ 高度层/楼层 · 来源文件夹
+if isempty(layerLabel)
+    if isempty(layer) || strcmpi(layer, 'ground')
+        layerLabel = '地面';
+    else
+        layerLabel = layer;
+    end
+end
 meta = typeMeta(dataType);
-if isempty(meta.fn) || ~exist(meta.fn, 'file')
-    error('数据类型 %s 暂无对应绘图脚本', dataType);
+if isempty(meta.unit)
+    titleText = sprintf('%s @ %s', dataType, layerLabel);
+else
+    titleText = sprintf('%s (%s) @ %s', dataType, meta.unit, layerLabel);
+end
+if ~isempty(srcName)
+    titleText = sprintf('%s · %s', titleText, srcName);
 end
 
-% 调用现有渲染函数:layer 为空表示地面层(preddir 根目录)
-if isempty(layer)
-    feval(meta.fn, preddir);
+if isfield(fig, 'indoor') && logical(fig.indoor)
+    % ---- 室内:调用室内渲染器(局部坐标 + 墙线/建筑叠加),范围由后端给出 ----
+    if ~exist('showrsrp_indoor', 'file')
+        error('缺少室内绘图脚本 showrsrp_indoor.m');
+    end
+    bounds = [];
+    if isfield(fig, 'bounds') && ~isempty(fig.bounds)
+        bounds = struct('left', fig.bounds.left, 'right', fig.bounds.right, ...
+            'bottom', fig.bounds.bottom, 'top', fig.bounds.top, 'res', fig.bounds.res);
+    end
+    wallFile = '';
+    if isfield(fig, 'wallFile') && ~isempty(fig.wallFile)
+        wallFile = char(fig.wallFile);
+    end
+    showrsrp_indoor(char(fig.demFile), bounds, wallFile, titleText);
 else
-    feval(meta.fn, preddir, layer);
+    % ---- 室外:调用仓库根目录下现有的 showrsrp_* 渲染函数 ----
+    if isempty(meta.fn) || ~exist(meta.fn, 'file')
+        error('数据类型 %s 暂无对应绘图脚本', dataType);
+    end
+    if isempty(layer)
+        feval(meta.fn, preddir);
+    else
+        feval(meta.fn, preddir, layer);
+    end
+    if ~ishghandle(gcf)
+        error('渲染函数未生成图形');
+    end
+    title(gca, titleText, 'FontName', titleFont(), 'FontSize', 13, 'FontWeight', 'bold');
 end
 
 if ~ishghandle(gcf)
     error('渲染函数未生成图形');
 end
 
-% 标题标注:数据类型 (单位) @ 高度层 · 来源文件夹
-if isempty(layer)
-    layerText = '地面';
-else
-    layerText = layer;
-end
-[~, srcName] = fileparts(fileparts(fileparts(preddir))); % .../<源名>/pred/0
-if isempty(meta.unit)
-    titleText = sprintf('%s @ %s', dataType, layerText);
-else
-    titleText = sprintf('%s (%s) @ %s', dataType, layerText);
-end
-if ~isempty(srcName)
-    titleText = sprintf('%s · %s', titleText, srcName);
-end
-title(gca, titleText, 'FontName', titleFont(), 'FontSize', 13, 'FontWeight', 'bold');
-
-% ---- 坐标轴统一处理 ----
+% ---- 坐标轴统一处理(室内/室外共用)----
 ax = gca;
 
 % 1) 统一坐标范围:同一批次的所有图使用同一范围,跨源对比时坐标轴严格一致
@@ -112,29 +141,41 @@ if isfield(fig, 'coordMode') && ~isempty(fig.coordMode)
     coordMode = char(fig.coordMode);
 end
 if ~strcmp(coordMode, 'abs')
-    applyRelativeTicks(ax, coordMode);
+    isIndoor = isfield(fig, 'indoor') && logical(fig.indoor);
+    applyRelativeTicks(ax, coordMode, isIndoor);
 end
 
 outDir = fileparts(outFile);
 if ~isempty(outDir) && ~isfolder(outDir)
     mkdir(outDir);
 end
+% 输出本图实际使用的坐标范围,便于核对"同一批图是否统一范围"
+curX = xlim(gca);  curY = ylim(gca);
+fprintf('AXES %d %.6f %.6f %.6f %.6f\n', figIndex, curX(1), curX(2), curY(1), curY(2));
 exportgraphics(gcf, outFile, 'Resolution', 150);
 close(gcf);
 end
 
 % ------------------------------------------------------------------
-function applyRelativeTicks(ax, mode)
+function applyRelativeTicks(ax, mode, isIndoor)
 % 把刻度标签改写成相对坐标(原点取区域左下角或中心),并在坐标轴标题里注明原点,
-% 便于报告阅读;轴范围本身保持绝对 UTM 不变(不影响与 GIS/工参叠加的几何关系)。
+% 便于报告阅读;轴范围本身保持绝对值不变(不影响与 GIS/工参叠加的几何关系)。
+% 注意:标签含中文,必须用支持中文的字体,否则会渲染成方框。
+if nargin < 3
+    isIndoor = false;
+end
+coordName = 'UTM';
+if isIndoor
+    coordName = '局部坐标';
+end
 xl = xlim(ax);  yl = ylim(ax);
 switch mode
     case 'rel-ll'      % 相对左下角
         ox = xl(1);  oy = yl(1);
-        originText = sprintf('原点 = 区域左下角 UTM(%.0f, %.0f)', ox, oy);
+        originText = sprintf('原点=左下角 %s(%.0f, %.0f)', coordName, ox, oy);
     case 'rel-center'  % 相对中心
         ox = mean(xl);  oy = mean(yl);
-        originText = sprintf('原点 = 区域中心 UTM(%.0f, %.0f)', ox, oy);
+        originText = sprintf('原点=中心 %s(%.0f, %.0f)', coordName, ox, oy);
     otherwise
         return;
 end
@@ -143,8 +184,9 @@ stepX = niceStep(xl(2) - xl(1));
 stepY = niceStep(yl(2) - yl(1));
 set(ax, 'XTick', makeTicks(xl, ox, stepX), 'XTickLabel', tickLabels(xl, ox, stepX));
 set(ax, 'YTick', makeTicks(yl, oy, stepY), 'YTickLabel', tickLabels(yl, oy, stepY));
-xlabel(ax, sprintf('X 相对距离(m)  [%s]', originText), 'FontName', 'times new roman', 'FontSize', 12);
-ylabel(ax, 'Y 相对距离(m)', 'FontName', 'times new roman', 'FontSize', 12);
+fontName = titleFont();   % 支持中文的字体
+xlabel(ax, sprintf('X 相对距离(m)  [%s]', originText), 'FontName', fontName, 'FontSize', 12);
+ylabel(ax, 'Y 相对距离(m)', 'FontName', fontName, 'FontSize', 12);
 end
 
 % 取"整"的刻度间隔(1/2/2.5/5 × 10^n 中最接近 目标间隔 的值)

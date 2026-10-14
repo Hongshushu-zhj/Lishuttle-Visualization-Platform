@@ -8,6 +8,7 @@ const sourcesStore = require('./sourcesStore');
 const jobQueue = require('./jobQueue');
 const cache = require('./cache');
 const exporter = require('./exporter');
+const { openResultsFolder } = require('./openResultsFolder');
 const { listDrives, listDir } = require('./fsBrowse');
 const { GROUND_LAYER, typeInfo, displayLabel, layerLabel } = require('./plotTypes');
 const { normalizeCoordMode, unionRange, variantFor } = require('./renderOptions');
@@ -36,11 +37,15 @@ function buildFigures(requests) {
       layers = type.layers.map((l) => l.key);
     }
     for (const layer of layers) {
-      if (!type.layers.some((l) => l.key === layer)) continue; // 该源没有这一层,跳过
-      const demFile =
-        layer === GROUND_LAYER
-          ? path.join(source.scan.predDir, type.file)
-          : path.join(source.scan.predDir, layer, type.file);
+      const layerInfo = type.layers.find((l) => l.key === layer);
+      if (!layerInfo) continue; // 该源没有这一层,跳过
+      const layerFile = layerInfo.file || type.file;
+      // 室外:文件名在各高度层子目录下;室内:数据文件直接位于 pred/0 下
+      const demFile = type.flat
+        ? path.join(source.scan.predDir, layerFile)
+        : layer === GROUND_LAYER
+          ? path.join(source.scan.predDir, layerFile)
+          : path.join(source.scan.predDir, layer, layerFile);
       if (!fs.existsSync(demFile)) continue;
       figures.push({
         key: `${source.id}|${req.dataType}|${layer}`,
@@ -48,8 +53,11 @@ function buildFigures(requests) {
         sourceName: source.name,
         dataType: req.dataType,
         layer,
+        layerLabel: layerInfo.label,
         preddir: source.scan.predDir,
         demFile,
+        indoor: !!(type.indoor || source.scan.indoor),
+        wallsFile: (source.scan && source.scan.wallsFile) || null,
         bounds: type.bounds,
         pngFile: cache.pngPath(source.id, req.dataType, layer),
         url: `/api/images/${source.id}/${req.dataType}/${layer === GROUND_LAYER ? 'ground' : layer}.png`,
@@ -62,21 +70,31 @@ function buildFigures(requests) {
 
 // 给一批 figure 套用渲染选项:
 //   1) 统一坐标范围:取本批所有图范围的并集,保证同一批图坐标轴一致(跨源对比必需)
-//   2) 坐标显示方式:绝对 UTM / 相对坐标
+//      注意:室内是局部米制坐标、室外是 UTM 大坐标,两者不能合并成一个范围,
+//      因此按坐标系分组,各组内部统一
+//   2) 坐标显示方式:绝对坐标 / 相对坐标
 // 结果写入每张图的 xlim/ylim/coordMode/pngFile/url,variant 用于区分不同渲染口径的缓存
 function applyRenderOptions(figures, coordMode) {
   const mode = normalizeCoordMode(coordMode);
-  const unified = unionRange(figures);
+  const groups = new Map();
   for (const f of figures) {
-    f.coordMode = mode;
-    if (unified) {
-      f.xlim = [unified.left, unified.right];
-      f.ylim = [unified.bottom, unified.top];
+    const key = f.indoor ? 'indoor' : 'outdoor';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  }
+  for (const group of groups.values()) {
+    const unified = unionRange(group);
+    for (const f of group) {
+      f.coordMode = mode;
+      if (unified) {
+        f.xlim = [unified.left, unified.right];
+        f.ylim = [unified.bottom, unified.top];
+      }
+      f.variant = variantFor(f, unified, mode);
+      f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant);
+      const file = cache.layerFileName(f.layer, f.variant);
+      f.url = `/api/images/${f.sourceId}/${f.dataType}/${file}`;
     }
-    f.variant = variantFor(f, unified, mode);
-    f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant);
-    const file = cache.layerFileName(f.layer, f.variant);
-    f.url = `/api/images/${f.sourceId}/${f.dataType}/${file}`;
   }
   return figures;
 }
@@ -89,9 +107,10 @@ function pubFigure(f) {
     dataType: f.dataType,
     dataTypeLabel: displayLabel(f.dataType),
     layer: f.layer,
-    layerLabel: layerLabel(f.layer),
+    layerLabel: f.layerLabel || layerLabel(f.layer),
     url: f.url,
     status: f.status,
+    axes: f.axes || null,
     error: f.error || null,
   };
 }
@@ -115,6 +134,10 @@ function pubSource(s) {
     name: s.name,
     offline: !fs.existsSync(s.path),
     utm: (s.scan && s.scan.utm) || null,
+    indoor: !!(s.scan && s.scan.indoor),
+    wallsFile: (s.scan && s.scan.wallsFile) || null,
+    wallsName: s.scan && s.scan.wallsFile ? path.basename(s.scan.wallsFile) : null,
+    resultsDir: cache.resultsDir(s.id),
     types,
   };
 }
@@ -166,6 +189,15 @@ router.post('/sources/:id/refresh', (req, res) => {
   res.json(pubSource(sourcesStore.updateScan(s.id, scan)));
 });
 
+router.post('/sources/:id/open-results', async (req, res) => {
+  try {
+    const folder = await openResultsFolder(req.params.id, req.body.dataType || '');
+    res.json({ ok: true, path: folder });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: `打开结果文件夹失败: ${e.message}` });
+  }
+});
+
 // ---------- 绘图 ----------
 router.post('/plot', (req, res) => {
   try {
@@ -208,13 +240,18 @@ router.get('/images/:sourceId/:dataType/:file', (req, res) => {
   const { sourceId, dataType, file } = req.params;
   const parsed = cache.parseLayerFile(file);
   if (!parsed) return res.status(400).json({ error: `图片名不合法: ${file}` });
+  const source = sourcesStore.get(sourceId);
+  if (!source) return res.status(404).json({ error: '数据源不存在' });
+  const type = source.scan.types[dataType];
   const { layer, variant } = parsed;
+  if (!type || !type.layers.some((l) => l.key === layer) || /[\\/\\\\:\x00]/.test(file)) {
+    return res.status(400).json({ error: '图片路径不合法' });
+  }
   const p = cache.pngPath(sourceId, dataType, layer, variant);
   if (!fs.existsSync(p)) return res.status(404).json({ error: '图片不存在,请先绘图' });
   // ?download=1 时以下载方式返回,文件名带来源/类型/高度层
   if (req.query.download) {
-    const source = sourcesStore.get(sourceId);
-    const niceName = `${source ? source.name : sourceId}_${dataType}_${layerLabel(layer)}.png`;
+    const niceName = path.basename(p);
     return res.download(p, niceName);
   }
   res.sendFile(p);

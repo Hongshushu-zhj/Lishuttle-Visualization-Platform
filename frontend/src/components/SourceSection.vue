@@ -6,14 +6,26 @@
           <div class="sec-head__title">
             <el-icon color="#1f6feb"><Folder /></el-icon>
             <span>{{ source.name }}</span>
+            <el-tag v-if="source.indoor" size="small" type="warning" effect="plain">室内</el-tag>
             <el-tag v-if="source.offline" type="danger" size="small">目录已丢失</el-tag>
             <el-tag v-else size="small" type="success" effect="plain">
               自动识别到 {{ knownTypes.length }} 种可绘图数据
             </el-tag>
           </div>
           <div class="muted mono" style="margin-top: 3px">{{ source.path }}</div>
+          <div v-if="source.resultsDir" class="muted mono" style="margin-top: 3px">结果图目录: {{ source.resultsDir }}</div>
+          <div v-if="source.indoor" class="muted" style="margin-top: 3px">
+            墙线/建筑:
+            <span v-if="source.wallsName" class="mono">{{ source.wallsName }} ✓ 将叠加绘制</span>
+            <span v-else style="color: #e6a23c">
+              未找到墙线文件(支持 walls.txt / *floor*.txt / out.txt,放在结果文件夹或其 pred 目录下)
+            </span>
+          </div>
         </div>
         <div class="sec-head__ops">
+          <el-button :icon="FolderOpened" :loading="openingFolder" :disabled="source.offline" @click="openFolder()">
+            打开结果文件夹
+          </el-button>
           <el-button
             type="primary"
             :icon="MagicStick"
@@ -53,14 +65,22 @@
             </el-radio-button>
           </el-radio-group>
           <span class="muted" style="margin-left: 12px">{{ currentTypeDesc }}</span>
+          <el-button link type="primary" :icon="FolderOpened" :loading="openingFolder" :disabled="source.offline" @click="openFolder(dataType)">
+            打开 {{ dataType }} 文件夹
+          </el-button>
         </div>
       </div>
 
-      <!-- 高度层 -->
+      <!-- 高度层(室内为楼层)-->
       <div class="row">
         <div class="row__label">
-          高度层
-          <el-tooltip placement="right" content="地面数据位于 pred\0 根目录,其余为对应高度层文件夹">
+          {{ source.indoor ? '楼层' : '高度层' }}
+          <el-tooltip
+            placement="right"
+            :content="source.indoor
+              ? '室内数据文件位于 pred\\0 下,文件名的数字后缀为楼层(如 RSRP_1.dem → 1 层)'
+              : '地面数据位于 pred\\0 根目录,其余为对应高度层文件夹'"
+          >
             <el-icon style="margin-left: 3px; vertical-align: -2px"><QuestionFilled /></el-icon>
           </el-tooltip>
         </div>
@@ -116,10 +136,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onActivated, onUnmounted, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Folder,
+  FolderOpened,
   MagicStick,
   Download,
   Warning,
@@ -150,6 +171,7 @@ const selectedLayers = ref([]);
 const figures = ref([]);
 const version = ref(0);
 const plotting = ref(false);
+const openingFolder = ref(false);
 const justFinished = ref(false);
 const jobError = ref('');
 const progress = ref({ done: 0, total: 0, status: '' });
@@ -157,6 +179,7 @@ const startedAt = ref(0);
 const elapsed = ref(0);
 let timer = null;
 let elapsedTimer = null;
+let cacheRequest = 0;
 
 const currentType = computed(() => allTypes.value.find((t) => t.key === dataType.value) || null);
 const currentLayers = computed(() => (currentType.value ? currentType.value.layers : []));
@@ -179,6 +202,18 @@ const progressText = computed(() => {
   return `正在绘图 ${done} / ${total} 张`;
 });
 
+async function openFolder(type = '') {
+  openingFolder.value = true;
+  try {
+    await api.openResultsFolder(props.source.id, type);
+    ElMessage.success(type ? `已打开 ${type} 结果文件夹` : '已打开结果文件夹');
+  } catch (e) {
+    ElMessage.error(e.message);
+  } finally {
+    openingFolder.value = false;
+  }
+}
+
 function selectAllLayers() {
   selectedLayers.value = currentLayers.value.map((l) => l.key);
 }
@@ -191,6 +226,9 @@ function resetForType() {
 
 // 切换类型/高度层时,只查询已生成图片用于展示(dryRun,不启动 MATLAB)
 async function loadCached() {
+  if (plotting.value) return;
+  const request = ++cacheRequest;
+  figures.value = [];
   if (!canPlot.value || props.source.offline) {
     figures.value = [];
     return;
@@ -201,9 +239,9 @@ async function loadCached() {
       true,
       { coordMode: props.coordMode }
     );
-    figures.value = r.figures;
+    if (request === cacheRequest && !plotting.value) figures.value = r.figures;
   } catch (e) {
-    figures.value = [];
+    if (request === cacheRequest && !plotting.value) figures.value = [];
   }
 }
 
@@ -211,6 +249,7 @@ async function startPlot() {
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;
+  cacheRequest++;
   startedAt.value = Date.now();
   elapsed.value = 0;
   progress.value = { done: 0, total: selectedLayers.value.length, status: 'running' };
@@ -333,6 +372,11 @@ onMounted(async () => {
   resetForType();
   await loadCached();
 });
+onActivated(loadCached);
+onUnmounted(() => {
+  cacheRequest++;
+  clearTimers();
+});
 </script>
 
 <style scoped>
@@ -357,9 +401,11 @@ onMounted(async () => {
 
 .sec-head__ops {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
 }
+.sec-head__ops .el-button + .el-button { margin-left: 0; }
 
 .row {
   display: flex;

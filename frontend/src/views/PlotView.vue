@@ -17,20 +17,29 @@
             还没有数据源。<br />点击「添加」选择跑完仿真得到的结果文件夹(需包含 pred 子目录)。
           </div>
 
+          <section v-for="group in sourceGroups" :key="group.key" class="source-group">
+            <div class="source-group__title">
+              <span>{{ group.label }}</span>
+              <el-tag size="small" effect="plain">{{ group.sources.length }}</el-tag>
+            </div>
+            <div v-if="!group.sources.length" class="muted source-group__empty">暂无{{ group.label }}数据源</div>
           <div
-            v-for="s in state.sources"
+            v-for="s in group.sources"
             :key="s.id"
             class="src-item"
-            :class="{ 'src-item--offline': s.offline }"
+            :class="{ 'src-item--offline': s.offline, 'src-item--selected': s.id === selectedSourceId }"
           >
+            <button class="src-item__select" :aria-pressed="s.id === selectedSourceId" @click="selectedSourceId = s.id">
             <div class="src-item__name" :title="s.path">
               <el-icon :color="s.offline ? '#f56c6c' : '#1f6feb'"><Folder /></el-icon>
               <span>{{ s.name }}</span>
+              <el-tag v-if="s.indoor" size="small" type="warning" effect="plain">室内</el-tag>
             </div>
             <div class="muted src-item__meta">
               {{ knownTypes(s).map((t) => t.label).join(' / ') || '无可绘图数据' }}
               <span v-if="s.offline" style="color: #f56c6c"> · 目录已丢失</span>
             </div>
+            </button>
             <div class="src-item__ops">
               <el-tooltip content="重新识别数据" placement="top">
                 <el-button link size="small" :icon="Refresh" @click="doRefresh(s)" />
@@ -40,22 +49,24 @@
               </el-tooltip>
             </div>
           </div>
+          </section>
         </el-card>
 
         <el-card shadow="never" class="side-card" style="margin-top: 12px">
           <template #header><span>使用说明</span></template>
           <ol class="tips">
             <li>添加结果文件夹后,平台会自动识别其中可绘制的数据类型与高度层。</li>
-            <li>在每个数据源卡片中选择「数据类型」与「高度层」,点击「开始绘图」。</li>
+            <li>在室内/室外分组中选择数据源,右侧切换到对应结果。</li>
+            <li>选择「数据类型」与「高度层/楼层」,点击「开始绘图」。</li>
             <li>图片按高度层依次展示,可单张下载、也可整包导出。</li>
-            <li>已画过的图会缓存,再次打开秒级显示;仿真重跑后自动重新绘图。</li>
+            <li>结果图统一保存在各自结果文件夹下的「路损结果图」目录;仿真重跑后自动重新绘图。</li>
           </ol>
         </el-card>
       </el-col>
 
-      <!-- 右侧:各数据源绘图区 -->
+      <!-- 右侧:当前选择的数据源 -->
       <el-col :span="19">
-        <div v-if="state.sources.length" class="display-bar">
+        <div v-if="selectedSource" class="display-bar">
           <CoordModeSelect v-model="coordMode" />
         </div>
         <el-empty
@@ -63,13 +74,20 @@
           description="请先在左侧添加结果文件夹"
           :image-size="120"
         />
-        <SourceSection
-          v-for="s in state.sources"
-          :key="s.id + '-' + s.scanVersion"
-          :source="s"
-          :coord-mode="coordMode"
-          style="margin-bottom: 18px"
+        <el-empty
+          v-else-if="!selectedSource"
+          description="请在左侧室内/室外分组中选择数据源"
+          :image-size="120"
         />
+        <KeepAlive>
+          <SourceSection
+            v-if="selectedSource"
+            :key="selectedSource.id + '-' + (refreshVersions[selectedSource.id] || 0)"
+            :source="selectedSource"
+            :coord-mode="coordMode"
+            style="margin-bottom: 18px"
+          />
+        </KeepAlive>
       </el-col>
     </el-row>
 
@@ -78,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { FolderAdd, Folder, Refresh, Delete } from '@element-plus/icons-vue';
 import { state, addSource, removeSource, refreshSource, knownTypes } from '../store';
@@ -88,10 +106,22 @@ import CoordModeSelect from '../components/CoordModeSelect.vue';
 
 const picker = ref(null);
 const coordMode = ref('abs');
+const selectedSourceId = ref('');
+const refreshVersions = ref({});
+const selectedSource = computed(() => state.sources.find((s) => s.id === selectedSourceId.value));
+const sourceGroups = computed(() => [
+  { key: 'indoor', label: '室内', sources: state.sources.filter((s) => s.indoor) },
+  { key: 'outdoor', label: '室外', sources: state.sources.filter((s) => !s.indoor) },
+]);
+
+watch(() => state.sources.map((s) => s.id), (ids) => {
+  if (!ids.includes(selectedSourceId.value)) selectedSourceId.value = '';
+});
 
 async function onPick(path) {
   try {
     const s = await addSource(path);
+    selectedSourceId.value = s.id;
     const n = knownTypes(s).length;
     ElMessage.success(`已添加「${s.name}」,识别到 ${n} 种可绘图数据`);
   } catch (e) {
@@ -102,6 +132,7 @@ async function onPick(path) {
 async function doRefresh(s) {
   try {
     const r = await refreshSource(s.id);
+    refreshVersions.value[s.id] = (refreshVersions.value[s.id] || 0) + 1;
     ElMessage.success(`已重新识别「${r.name}」`);
   } catch (e) {
     ElMessage.error(e.message);
@@ -147,6 +178,13 @@ async function doRemove(s) {
   font-weight: 600;
 }
 
+.source-group { margin-top: 12px; }
+.source-group__title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 600; font-size: 13px; }
+.source-group__empty { padding: 4px 0 10px; }
+.src-item__select { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.src-item__select:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.src-item.src-item--selected { border-color: var(--brand); background: #ecf5ff; }
+
 .src-item {
   position: relative;
   padding: 8px 8px 8px 10px;
@@ -173,6 +211,7 @@ async function doRemove(s) {
   font-size: 13px;
   font-weight: 600;
   word-break: break-all;
+  padding-right: 46px;
 }
 
 .src-item__meta {

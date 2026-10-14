@@ -50,7 +50,11 @@ function displayLabel(key) {
 }
 
 function layerLabel(layer) {
-  return layer === GROUND_LAYER ? GROUND_LABEL : layer;
+  if (layer === GROUND_LAYER) return GROUND_LABEL;
+  // 室内楼层:层键 F1/F2 → 显示 1层/2层
+  const m = String(layer).match(/^F(\d+)$/);
+  if (m) return `${m[1]}层`;
+  return layer;
 }
 
 module.exports = { PLOT_TYPES, GROUND_LAYER, GROUND_LABEL, isKnown, typeInfo, displayLabel, layerLabel };
