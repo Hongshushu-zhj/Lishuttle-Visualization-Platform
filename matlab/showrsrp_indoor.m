@@ -60,12 +60,25 @@ data = data(1:min(row, M1), :);
 
 data = flipud(data);                       % 与室外一致:翻转为 Y 轴向上
 invalid = (data == -32768);
-data(~invalid) = data(~invalid) / 100;     % 与室外一致:整型存储放大 100 倍
+[~, dataName] = fileparts(demFile);
+isBestServer = startsWith(upper(dataName), 'BESTSERVER');
+if ~isBestServer
+    data(~invalid) = data(~invalid) / 100; % 功率/信噪比放大 100 倍,小区编号保持整数
+end
 alphadata = ones(size(data));
 alphadata(invalid) = 0;                    % 无数据处透明
 
 % ---- 显示范围(各类型默认值,可按需调整) ----
 lims = indoorColorLims(demFile);
+if isBestServer
+    valid = data(~invalid);
+    if isempty(valid)
+        lims = [0 1];
+    else
+        lims = [min(valid) max(valid)];
+        if lims(1) == lims(2), lims = lims + [-0.5 0.5]; end
+    end
+end
 
 % ---- 绘图 ----
 figure();
@@ -76,7 +89,7 @@ if numel(X) > N1, X = X(1:N1); end
 if numel(Y) > size(data, 1), Y = Y(1:size(data, 1)); end
 im = imagesc(X, Y, data, lims);
 im.AlphaData = alphadata;
-colormap(flipud(jet));
+if isBestServer, colormap(jet); else, colormap(flipud(jet)); end
 set(gca, 'YDir', 'normal');
 
 % ---- 叠加墙线(建筑) ----
@@ -133,7 +146,7 @@ lines = {};
 while true
     line = fgetl(fid);
     if ~ischar(line), break; end
-    line = strtrim(line);
+    line = strtrim(regexprep(line, '%.*$', '')); % 兼容 load 支持的注释行和行尾注释
     if ~isempty(line), lines{end + 1} = line; end %#ok<AGROW>
 end
 walls = zeros(0, 4);
@@ -260,7 +273,8 @@ end
 
 function lims = indoorColorLims(demFile)
 % 各数据类型的室内显示范围(与室外脚本保持同一套口径,便于对比)
-name = upper(demFile);
+[~, name] = fileparts(demFile);
+name = upper(name);
 if contains(name, 'DLRSSINR')
     lims = [-10 30];
 elseif contains(name, 'SCR')
@@ -275,7 +289,8 @@ end
 end
 
 function s = colorbarLabel(demFile)
-name = upper(demFile);
+[~, name] = fileparts(demFile);
+name = upper(name);
 if contains(name, 'DLRSSINR')
     s = 'DL RSSINR(dB)';
 elseif contains(name, 'SCR')

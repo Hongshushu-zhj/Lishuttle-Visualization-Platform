@@ -29,6 +29,10 @@ function buildFigures(requests) {
     const source = sourcesStore.get(req.sourceId);
     if (!source) throw httpErr(400, `数据源不存在: ${req.sourceId}`);
     if (!fs.existsSync(source.path)) throw httpErr(400, `数据源目录已不存在(离线): ${source.path}`);
+    // 绘图前重新扫描,确保 index、楼层范围与墙线选择使用当前文件。
+    const scan = scanSource(source.path);
+    if (!scan.ok) throw httpErr(400, scan.error);
+    sourcesStore.updateScan(source.id, scan);
     const type = source.scan.types[req.dataType];
     if (!type) throw httpErr(400, `数据源 ${source.name} 中没有数据类型 ${req.dataType}`);
     if (!type.known) throw httpErr(400, `数据类型 ${req.dataType} 暂无对应绘图脚本,暂不支持`);
@@ -58,7 +62,7 @@ function buildFigures(requests) {
         demFile,
         indoor: !!(type.indoor || source.scan.indoor),
         wallsFile: (source.scan && source.scan.wallsFile) || null,
-        bounds: type.bounds,
+        bounds: layerInfo.bounds || type.bounds,
         pngFile: cache.pngPath(source.id, req.dataType, layer),
         url: `/api/images/${source.id}/${req.dataType}/${layer === GROUND_LAYER ? 'ground' : layer}.png`,
         status: 'pending',

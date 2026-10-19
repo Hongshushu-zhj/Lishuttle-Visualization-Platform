@@ -102,7 +102,7 @@ if isfield(fig, 'indoor') && logical(fig.indoor)
     showrsrp_indoor(char(fig.demFile), bounds, wallFile, titleText);
 else
     % ---- 室外:调用本目录内的 showrsrp_* 渲染函数 ----
-    if isempty(meta.fn) || ~exist(meta.fn, 'file')
+    if isempty(meta.fn)
         error('数据类型 %s 暂无对应绘图脚本', dataType);
     end
     if ~exist(meta.fn, 'file')

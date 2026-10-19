@@ -55,11 +55,58 @@ ax = axes;
 im = imagesc(ax, left+(0:N-1)*res, bottom+(0:M-1)*res, data);
 im.AlphaData = double(valid);
 set(ax, 'YDir', 'normal', 'Color', 'w', 'FontName', 'Times New Roman', 'FontSize', 12);
-if ~isempty(lims), caxis(ax, lims); end
-colormap(ax, jet(256));
+if isempty(lims)
+    values = data(valid);
+    if isempty(values), lims = [0 1]; else, lims = [min(values) max(values)]; end
+    if lims(1) == lims(2), lims = lims + [-0.5 0.5]; end
+end
+caxis(ax, lims);
+if strcmp(dataType, 'BESTSERVER')
+    colormap(ax, jet(256));
+else
+    colormap(ax, flipud(jet(256))); % 与原室外脚本的色表方向一致
+end
+hold(ax, 'on');
+drawOutdoorOverlays(ax, preddir, [left right bottom top]);
 axis(ax, 'equal');
 xlim(ax, [left right]); ylim(ax, [bottom top]);
 xlabel(ax, 'X (m)'); ylabel(ax, 'Y (m)');
 box(ax, 'on');
 c = colorbar(ax); c.Label.String = label;
+end
+
+function drawOutdoorOverlays(ax, preddir, bounds)
+% 与原室外脚本一致,建筑与基站始终从 pred/0 读取。
+buildingFile = fullfile(preddir, 'building1');
+if isfile(buildingFile)
+    fid = fopen(buildingFile, 'rt');
+    if fid < 0, error('无法打开建筑文件: %s', buildingFile); end
+    cleanup = onCleanup(@() fclose(fid));
+    while ~feof(fid)
+        digest = textscan(fid, '%d %s %d %f', 1);
+        if isempty(digest{3}), break; end
+        polygon = textscan(fid, '%f %f', digest{3});
+        x = polygon{1}; y = polygon{2};
+        if isempty(x) || isempty(y), continue; end
+        if min(x) > bounds(2) || max(x) < bounds(1) || min(y) > bounds(4) || max(y) < bounds(3)
+            continue;
+        end
+        plot(ax, x, y, 'Color', [0.5 0.5 0.5], 'LineWidth', 0.8);
+        if digest{4} > 30
+            text(ax, x(1), y(1), num2str(digest{4}), 'FontSize', 10, 'Color', [0.7 0.7 0.7]);
+        end
+    end
+    clear cleanup;
+end
+cellFile = fullfile(preddir, 'cells1.txt');
+if isfile(cellFile)
+    fid = fopen(cellFile, 'rt');
+    if fid < 0, error('无法打开基站文件: %s', cellFile); end
+    cleanup = onCleanup(@() fclose(fid)); %#ok<NASGU>
+    cells = textscan(fid, '%s%f%f%f', 'Delimiter', ',');
+    for k = 1:numel(cells{1})
+        scatter(ax, cells{2}(k), cells{3}(k), 100/3, 'r', ...
+            'MarkerEdgeColor', [0 .5 .5], 'MarkerFaceColor', [0 .7 .7], 'LineWidth', 1.5);
+    end
+end
 end

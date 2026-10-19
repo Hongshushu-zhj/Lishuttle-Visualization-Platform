@@ -123,7 +123,8 @@
   原平台 `backend/data/cache` 中的图片可以通过 `node backend/scripts/migrate-results.js` 批量复制到新目录,
   不覆盖已有结果并保留旧缓存;预览时也会按需迁移;
   再次打开或切换类型时秒级显示(不会重复启动 MATLAB);
-  `.dem` 文件被重新仿真覆盖后(mtime/大小变化)或**渲染口径升级后**会自动重新绘图;
+  `.dem` 文件被重新仿真覆盖后(mtime/大小变化)、`index.txt` 或墙线/建筑/基站文件变化后,
+  以及**渲染口径升级后**会自动重新绘图;
 - **放大预览**:点图卡右上角放大镜可看大图。
 
 ### 2. 结果对比页
@@ -202,6 +203,7 @@ copy config.example.json config.json   # 然后按需修改
 |---|---|
 | `platform/matlab/showrsrp_*.m`(不含 `showrsrp_indoor.m`) | 室外各类型的渲染函数(从原脚本复制,绘图逻辑保持一致) |
 | `platform/matlab/plot_dispatch.m` | 批量绘图调度:分流室内/室外、统一坐标范围、等比例锁定、相对坐标刻度 |
+| `platform/matlab/showrsrp_outdoor.m` | 室外备用渲染器:对应类型的专用脚本缺失时使用,支持建筑和基站叠加 |
 | `platform/matlab/showrsrp_indoor.m` | **室内渲染器**(新增):局部坐标 + 墙线/建筑叠加 + 栅格尺寸自动校正 |
 | `platform/backend/src/renderOptions.js` | 统一范围计算、坐标模式、渲染变体(缓存键)逻辑 |
 
@@ -308,6 +310,11 @@ cd platform/frontend && npm run dev
 
 # 前端改动后重新构建,供 启动平台.bat 使用
 cd platform/frontend && npm run build
+
+# MATLAB 与后端兼容性回归检查(使用临时数据,不修改仿真结果)
+# 在 platform 目录执行:
+node backend/scripts/verify-cache-compatibility.js
+matlab -batch "addpath('backend/scripts'); verify_matlab_compatibility"
 
 # 查看某个文件夹的自动识别结果
 cd platform/backend && node scripts/dev-check.js "D:/workspace/antenna-draw/kokin_tg"

@@ -148,7 +148,7 @@ function scanOutdoor(predDir, entries, types) {
       if (!isDirectoryEntry(predDir, sub)) continue;
       if (fs.existsSync(path.join(predDir, sub.name, e.file))) layers.push(sub.name);
     }
-    const sorted = ['ground', ...sortLayers(layers.filter((n) => n !== 'ground'))];
+    const sorted = [...(layers.includes('ground') ? ['ground'] : []), ...sortLayers(layers.filter((n) => n !== 'ground'))];
     types[key] = {
       key,
       file: e.file,
@@ -197,7 +197,10 @@ function scanIndoor(predDir, entries, types) {
       };
     }
     if (!types[typeKey].layers.some((l) => l.key === layerKey)) {
-      types[typeKey].layers.push({ key: layerKey, label: layerLabel, file: e.file });
+      types[typeKey].layers.push({
+        key: layerKey, label: layerLabel, file: e.file,
+        bounds: e.left !== undefined ? boundsOf(e) : bounds,
+      });
     }
   }
   // 楼层排序:F1、F2…;无楼层标记的排最后
