@@ -1,5 +1,5 @@
 // 数据类型注册表。key 与 .dem 文件名(去后缀)一致,label 用于界面展示。
-// fn 为仓库根目录下对应的 showrsrp_* 渲染函数名。
+// fn 为 platform/matlab 目录下对应的 showrsrp_* 渲染函数名。
 const PLOT_TYPES = {
   RSRP: {
     label: 'RSRP',

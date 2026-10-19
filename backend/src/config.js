@@ -24,7 +24,6 @@ const JOBS_DIR = path.join(DATA_DIR, 'jobs');
 const EXPORT_DIR = path.join(DATA_DIR, 'exports');
 const SOURCES_FILE = path.join(DATA_DIR, 'sources.json');
 const MATLAB_DIR = path.join(ROOT, '..', 'matlab'); // platform/matlab(plot_dispatch.m)
-const REPO_ROOT = path.join(ROOT, '..', '..'); // 仓库根目录(showrsrp_*.m 所在)
 const FRONTEND_DIST = path.join(ROOT, '..', 'frontend', 'dist');
 
 for (const d of [DATA_DIR, CACHE_DIR, JOBS_DIR, EXPORT_DIR]) {
@@ -40,6 +39,5 @@ module.exports = {
   EXPORT_DIR,
   SOURCES_FILE,
   MATLAB_DIR,
-  REPO_ROOT,
   FRONTEND_DIST,
 };
