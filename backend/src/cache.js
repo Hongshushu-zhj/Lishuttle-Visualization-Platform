@@ -3,6 +3,8 @@ const path = require('path');
 const { CACHE_DIR } = require('./config');
 const { GROUND_LAYER } = require('./plotTypes');
 const sourcesStore = require('./sourcesStore');
+const { scanSource } = require('./scanner');
+const { createHash } = require('crypto');
 
 const RESULTS_DIR_NAME = '路损结果图';
 
@@ -21,7 +23,7 @@ function safeSegment(value) {
 
 // 渲染逻辑版本:绘图脚本或默认渲染参数变更时递增,
 // 已缓存的 PNG 会自动判定为过期并重新绘制(无需手动清缓存)。
-const RENDER_VERSION = 2;
+const RENDER_VERSION = 3;
 
 // 变体名追加在文件名里:ground.png / ground@u1a2b3c4d.png / ground@rel-ll.png
 // 变体用于区分"同一张图的不同渲染口径"(统一坐标范围、相对坐标显示等)。
@@ -58,7 +60,28 @@ function metaPath(sourceId, dataType, layer, variant = '') {
   return pngPath(sourceId, dataType, layer, variant) + '.meta.json';
 }
 
-// 有效性判断:记录 .dem 的路径/mtime/大小 + 渲染版本,任一不符即需重画
+// 小型索引与叠加文件计算内容签名,包含缺失状态,新增/删除文件也会使缓存失效。
+function dependencySignature(sourceId) {
+  const source = sourcesStore.get(sourceId);
+  if (!source) throw new Error(`数据源不存在: ${sourceId}`);
+  const scan = scanSource(source.path);
+  if (!scan.ok) throw new Error(scan.error);
+  const files = [path.join(scan.predDir, 'index.txt')];
+  if (scan.indoor) {
+    if (scan.wallsFile) files.push(scan.wallsFile);
+  } else {
+    files.push(path.join(scan.predDir, 'building1'), path.join(scan.predDir, 'cells1.txt'));
+  }
+  const hash = createHash('sha256');
+  for (const file of files) {
+    hash.update(JSON.stringify(file));
+    if (fs.existsSync(file)) hash.update(fs.readFileSync(file));
+    else hash.update('<missing>');
+  }
+  return hash.digest('hex');
+}
+
+// 有效性判断:.dem 路径/mtime/大小、索引/叠加文件内容、渲染版本均需一致
 function isCached(sourceId, dataType, layer, demFile, variant = '') {
   const png = pngPath(sourceId, dataType, layer, variant);
   const meta = metaPath(sourceId, dataType, layer, variant);
@@ -76,7 +99,8 @@ function isCached(sourceId, dataType, layer, demFile, variant = '') {
       m.demPath === demFile &&
       m.mtimeMs === st.mtimeMs &&
       m.size === st.size &&
-      m.renderVersion === RENDER_VERSION
+      m.renderVersion === RENDER_VERSION &&
+      m.dependencies === dependencySignature(sourceId)
     );
   } catch (e) {
     return false;
@@ -94,6 +118,7 @@ function markCached(sourceId, dataType, layer, demFile, variant = '', axes = nul
       mtimeMs: st.mtimeMs,
       size: st.size,
       renderVersion: RENDER_VERSION,
+      dependencies: dependencySignature(sourceId),
       variant,
       axes, // 该图实际使用的坐标范围(便于事后核对渲染口径)
       at: new Date().toISOString(),
