@@ -82,7 +82,7 @@ set(gca, 'YDir', 'normal');
 % ---- 叠加墙线(建筑) ----
 wallCount = 0;
 if ~isempty(wallFile) && isfile(wallFile)
-    walls = load(wallFile);
+    walls = readWallSegments(wallFile);
     if ~isempty(walls) && size(walls, 2) >= 4
         for row = 1:size(walls, 1)
             x = walls(row, [1 3]);
@@ -117,6 +117,50 @@ end
 if wallCount == 0
     % 没有墙线时给出提示(室内图缺建筑会明显影响判读)
     warning('未找到或未绘制任何墙线数据(室内图建议叠加建筑轮廓)');
+end
+end
+
+% ------------------------------------------------------------------
+function walls = readWallSegments(wallFile)
+% 支持纯四列墙线，以及 building.txt 的“块编号 数量”+“编号 x1 y1 x2 y2”。
+% building 文件后续 intersections / boundary 段不属于墙线。
+fid = fopen(wallFile, 'rt');
+if fid < 0
+    error('无法打开墙线文件: %s', wallFile);
+end
+cleanup = onCleanup(@() fclose(fid)); %#ok<NASGU>
+lines = {};
+while true
+    line = fgetl(fid);
+    if ~ischar(line), break; end
+    line = strtrim(line);
+    if ~isempty(line), lines{end + 1} = line; end %#ok<AGROW>
+end
+walls = zeros(0, 4);
+if isempty(lines), return; end
+header = str2double(regexp(lines{1}, '[\s,]+', 'split'));
+if numel(header) == 2 && all(isfinite(header)) && header(2) >= 0 && header(2) == fix(header(2))
+    count = header(2);
+    if numel(lines) < count + 1
+        error('墙线文件声明 %d 条墙线，实际记录不足: %s', count, wallFile);
+    end
+    walls = zeros(count, 4);
+    for k = 1:count
+        values = str2double(regexp(lines{k + 1}, '[\s,]+', 'split'));
+        if numel(values) ~= 5 || any(~isfinite(values))
+            error('墙线记录 %d 应为“编号 x1 y1 x2 y2”: %s', k, wallFile);
+        end
+        walls(k, :) = values(2:5);
+    end
+else
+    walls = zeros(numel(lines), 4);
+    for k = 1:numel(lines)
+        values = str2double(regexp(lines{k}, '[\s,]+', 'split'));
+        if numel(values) ~= 4 || any(~isfinite(values))
+            error('墙线记录 %d 应为“x1 y1 x2 y2”: %s', k, wallFile);
+        end
+        walls(k, :) = values;
+    end
 end
 end
 
