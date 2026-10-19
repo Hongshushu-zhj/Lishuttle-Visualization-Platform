@@ -3,7 +3,7 @@
 基于 MATLAB 仿真结果的一站式出图平台:添加结果文件夹后自动识别其中可绘制的数据类型与高度层,
 在网页上勾选即可调用 MATLAB 出图,支持单张下载、整包导出与多结果横向对比。
 
-后端实际绘图仍然使用仓库根目录下原有的 `showrsrp_*.m` 脚本,出图风格与手动运行完全一致
+后端实际绘图使用平台自带的 `matlab/showrsrp_*.m` 脚本,无需依赖 `platform/` 外的绘图文件,出图风格与手动运行完全一致
 (同样的数值范围、色标、建筑物与基站叠加)。
 
 ---
@@ -91,7 +91,7 @@
 | DLRSSINR | 下行 RS-SINR | -10 ~ 30 dB | 数值需 ÷100 |
 | BESTSERVER | 最佳服务小区 | 自动 | 存的是小区编号,不除以 100 |
 
-如需调整显示范围或新增类型,改 `showrsrp_*.m` 中的 `*Lims` 变量,并在
+如需调整显示范围或新增类型,改 `matlab/showrsrp_*.m` 中的 `*Lims` 变量,并在
 `platform/backend/src/plotTypes.js` 与 `platform/matlab/plot_dispatch.m` 中登记新类型即可。
 
 ---
@@ -104,7 +104,7 @@
   点击数据源后,右侧只展示该文件夹的绘图设置与结果。首次进入先选择数据源,新增数据源后自动切换过去;
   切换时保留各源的类型、层选择及正在运行的任务进度;
 - **自动识别**:卡片上直接显示识别到的类型与层数,只列出该源实际存在的数据;
-- **室内/室外自动分流**:室外调用仓库根目录下原有的 `showrsrp_*.m`,室内调用
+- **室内/室外自动分流**:室外调用 `platform/matlab/showrsrp_*.m`,室内调用
   `platform/matlab/showrsrp_indoor.m`(局部坐标 + 墙线/建筑叠加),两者出图口径统一;
 - **高度层 / 楼层集中展示**:同一数据源选中的所有层在同一网格中平铺,每张图标注「数据类型 · 高度层/楼层」;
 - **图片自带标注**:每张图内部烧录标题,形如 `RSRP (dBm) @ 10m · kokin_tg`、`RSRP (dBm) @ 1层 · zhengzhou_indoor_TEST2`,
@@ -144,7 +144,9 @@
 platform/
 ├─ 启动平台.bat / 停止平台.bat   # 一键启动 / 停止
 ├─ matlab/
-│  └─ plot_dispatch.m            # MATLAB 批量绘图调度(调用根目录 showrsrp_*.m)
+│  ├─ plot_dispatch.m            # MATLAB 批量绘图调度
+│  ├─ showrsrp_*.m               # 室外各类型绘图函数(随平台分发)
+│  └─ showrsrp_indoor.m          # 室内绘图函数
 ├─ backend/                      # Node.js + Express,端口 8000
 │  ├─ config.json                # ← MATLAB 路径、端口、并发数(可修改)
 │  ├─ server.js
@@ -198,7 +200,7 @@ copy config.example.json config.json   # 然后按需修改
 
 | 文件 | 作用 |
 |---|---|
-| 仓库根目录 `showrsrp_*.m` | 室外各类型的渲染函数(你原有的脚本,平台直接调用,未做改动) |
+| `platform/matlab/showrsrp_*.m`(不含 `showrsrp_indoor.m`) | 室外各类型的渲染函数(从原脚本复制,绘图逻辑保持一致) |
 | `platform/matlab/plot_dispatch.m` | 批量绘图调度:分流室内/室外、统一坐标范围、等比例锁定、相对坐标刻度 |
 | `platform/matlab/showrsrp_indoor.m` | **室内渲染器**(新增):局部坐标 + 墙线/建筑叠加 + 栅格尺寸自动校正 |
 | `platform/backend/src/renderOptions.js` | 统一范围计算、坐标模式、渲染变体(缓存键)逻辑 |

@@ -9,7 +9,7 @@ function plot_dispatch(jobFile)
 %                    "layer": "10m" 或 ""(地面), "outFile": "...png" } ] }
 %
 % 说明:
-%   - 复用仓库根目录下已有的 showrsrp_* 渲染函数,出图风格与手动绘图一致;
+%   - 使用本目录内的 showrsrp_* 渲染函数,出图风格与手动绘图一致;
 %   - 每张图追加标题"数据类型 (单位) @ 高度层",标注直接写入 PNG;
 %   - stdout 输出 PROGRESS i/N、FIGURE_ERROR i 消息、DONE,供后端解析进度。
 
@@ -28,8 +28,7 @@ if ~iscell(figures)
 end
 
 scriptDir = fileparts(mfilename('fullpath'));
-repoRoot = fileparts(fileparts(scriptDir)); % platform/matlab -> platform -> 仓库根目录
-addpath(repoRoot);
+addpath(scriptDir); % 绘图脚本随平台一起分发,无需依赖上级目录
 
 n = numel(figures);
 for i = 1:n
@@ -102,7 +101,7 @@ if isfield(fig, 'indoor') && logical(fig.indoor)
     end
     showrsrp_indoor(char(fig.demFile), bounds, wallFile, titleText);
 else
-    % ---- 室外:调用仓库根目录下现有的 showrsrp_* 渲染函数 ----
+    % ---- 室外:调用本目录内的 showrsrp_* 渲染函数 ----
     if isempty(meta.fn) || ~exist(meta.fn, 'file')
         error('数据类型 %s 暂无对应绘图脚本', dataType);
     end

@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { config, JOBS_DIR, MATLAB_DIR, REPO_ROOT } = require('./config');
+const { config, JOBS_DIR, MATLAB_DIR } = require('./config');
 const { GROUND_LAYER } = require('./plotTypes');
 
 // 启动一次 MATLAB -batch 执行 job 中所有待画图。
@@ -36,7 +36,7 @@ function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
 
     const code = `addpath('${MATLAB_DIR}'); plot_dispatch('${jobFile}');`;
     const cmd = `"${config.matlabExe}" -batch "${code}"`;
-    const proc = spawn(cmd, { shell: true, windowsHide: true, cwd: REPO_ROOT });
+    const proc = spawn(cmd, { shell: true, windowsHide: true, cwd: MATLAB_DIR });
 
     let stderr = '';
     let sawDone = false;
