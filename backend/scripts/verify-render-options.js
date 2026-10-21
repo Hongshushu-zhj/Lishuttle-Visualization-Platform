@@ -47,8 +47,11 @@ function makeShiftedFixture() {
 // 清掉指定源的缓存,强制重新出图(这样才能读到本次实际使用的坐标范围)
 function clearCache(sourceId, dataType) {
   const cache = require('../src/cache');
+  const store = require('../src/sourcesStore');
+  const source = store.get(sourceId);
   const dirs = [
     path.join(cache.resultsDir(sourceId), dataType),
+    ...Object.keys(source.scan.tasks).map((taskId) => path.join(cache.resultsDir(sourceId, taskId), dataType)),
     path.join(__dirname, '..', 'data', 'cache', sourceId, dataType),
   ];
   for (const dir of dirs) {

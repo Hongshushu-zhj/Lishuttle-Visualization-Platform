@@ -3,15 +3,16 @@ const path = require('path');
 const { CACHE_DIR } = require('./config');
 const { GROUND_LAYER } = require('./plotTypes');
 const sourcesStore = require('./sourcesStore');
-const { scanSource } = require('./scanner');
+const { scanTask } = require('./scanner');
 const { createHash } = require('crypto');
 
 const RESULTS_DIR_NAME = '路损结果图';
 
-function resultsDir(sourceId) {
+function resultsDir(sourceId, taskId) {
   const source = sourcesStore.get(sourceId);
   if (!source) throw new Error(`数据源不存在: ${sourceId}`);
-  return path.resolve(source.path, RESULTS_DIR_NAME);
+  const root = path.resolve(source.path, RESULTS_DIR_NAME);
+  return taskId === undefined ? root : path.join(root, safeSegment(sourcesStore.task(sourceId, taskId).id));
 }
 
 function safeSegment(value) {
@@ -38,33 +39,36 @@ function parseLayerFile(fileName) {
   return { layer: m[1], variant: m[2] || '' };
 }
 
-function resultFileName(sourceId, dataType, layer, variant = '') {
+function resultFileName(sourceId, dataType, layer, variant = '', taskId) {
   const source = sourcesStore.get(sourceId);
   if (!source) throw new Error(`数据源不存在: ${sourceId}`);
-  const type = source.scan.types[dataType];
+  const task = sourcesStore.task(sourceId, taskId);
+  const type = task.types[dataType];
   const info = type && type.layers.find((l) => l.key === layer);
   const label = info ? info.label : layer === GROUND_LAYER ? '地面' : layer;
   const mode = variant.includes('rel-center') ? '相对坐标-区域中心'
     : variant.includes('rel-ll') ? '相对坐标-左下角' : '绝对坐标';
   const range = variant.match(/(?:^|_)(u[0-9a-f]+)(?:_|$)/);
-  const name = `${source.name}_${dataType}_${label}_${mode}${range ? `_对比范围-${range[1].slice(1)}` : ''}.png`;
+  const name = `${source.name}_${task.name}_${dataType}_${label}_${mode}${range ? `_对比范围-${range[1].slice(1)}` : ''}.png`;
   return name.replace(/[<>:"/\\\\|?*\x00-\x1f]/g, '_');
 }
 
-function pngPath(sourceId, dataType, layer, variant = '') {
+function pngPath(sourceId, dataType, layer, variant = '', taskId) {
   safeSegment(layerFileName(layer, variant));
-  return path.join(resultsDir(sourceId), safeSegment(dataType), resultFileName(sourceId, dataType, layer, variant));
+  const task = sourcesStore.task(sourceId, taskId);
+  return path.join(resultsDir(sourceId, task.id), safeSegment(dataType), resultFileName(sourceId, dataType, layer, variant, task.id));
 }
 
-function metaPath(sourceId, dataType, layer, variant = '') {
-  return pngPath(sourceId, dataType, layer, variant) + '.meta.json';
+function metaPath(sourceId, dataType, layer, variant = '', taskId) {
+  return pngPath(sourceId, dataType, layer, variant, taskId) + '.meta.json';
 }
 
 // 小型索引与叠加文件计算内容签名,包含缺失状态,新增/删除文件也会使缓存失效。
-function dependencySignature(sourceId) {
+function dependencySignature(sourceId, taskId) {
   const source = sourcesStore.get(sourceId);
   if (!source) throw new Error(`数据源不存在: ${sourceId}`);
-  const scan = scanSource(source.path);
+  const task = sourcesStore.task(sourceId, taskId);
+  const scan = scanTask(source.path, task.predDir);
   if (!scan.ok) throw new Error(scan.error);
   const files = [path.join(scan.predDir, 'index.txt')];
   if (scan.indoor) {
@@ -82,15 +86,11 @@ function dependencySignature(sourceId) {
 }
 
 // 有效性判断:.dem 路径/mtime/大小、索引/叠加文件内容、渲染版本均需一致
-function isCached(sourceId, dataType, layer, demFile, variant = '') {
-  const png = pngPath(sourceId, dataType, layer, variant);
-  const meta = metaPath(sourceId, dataType, layer, variant);
+function isCached(sourceId, dataType, layer, demFile, variant = '', taskId) {
+  const png = pngPath(sourceId, dataType, layer, variant, taskId);
+  const meta = metaPath(sourceId, dataType, layer, variant, taskId);
   // 旧平台缓存按需复制到数据源目录,保留原文件以便回退。
-  const legacyName = layerFileName(layer, variant);
-  if (!fs.existsSync(png) && (
-    fs.existsSync(path.join(CACHE_DIR, sourceId, dataType, legacyName)) ||
-    fs.existsSync(path.join(resultsDir(sourceId), dataType, legacyName))
-  )) migrateSource(sourceId);
+  if (!fs.existsSync(png)) migrateSource(sourceId);
   if (!fs.existsSync(png) || !fs.existsSync(meta)) return false;
   try {
     const st = fs.statSync(demFile);
@@ -100,16 +100,16 @@ function isCached(sourceId, dataType, layer, demFile, variant = '') {
       m.mtimeMs === st.mtimeMs &&
       m.size === st.size &&
       m.renderVersion === RENDER_VERSION &&
-      m.dependencies === dependencySignature(sourceId)
+      m.dependencies === dependencySignature(sourceId, taskId)
     );
   } catch (e) {
     return false;
   }
 }
 
-function markCached(sourceId, dataType, layer, demFile, variant = '', axes = null) {
+function markCached(sourceId, dataType, layer, demFile, variant = '', axes = null, taskId) {
   const st = fs.statSync(demFile);
-  const meta = metaPath(sourceId, dataType, layer, variant);
+  const meta = metaPath(sourceId, dataType, layer, variant, taskId);
   fs.mkdirSync(path.dirname(meta), { recursive: true });
   fs.writeFileSync(
     meta,
@@ -118,7 +118,7 @@ function markCached(sourceId, dataType, layer, demFile, variant = '', axes = nul
       mtimeMs: st.mtimeMs,
       size: st.size,
       renderVersion: RENDER_VERSION,
-      dependencies: dependencySignature(sourceId),
+      dependencies: dependencySignature(sourceId, taskId),
       variant,
       axes, // 该图实际使用的坐标范围(便于事后核对渲染口径)
       at: new Date().toISOString(),
@@ -126,37 +126,36 @@ function markCached(sourceId, dataType, layer, demFile, variant = '', axes = nul
   );
 }
 
-// 仅迁移平台注册的图片及其元数据,不覆盖目标目录里的已有结果。
+// 旧目录没有任务维度,仅通过元数据中的 DEM 路径确定归属,避免把任务结果混用。
 function migrateSource(sourceId) {
   const source = sourcesStore.get(sourceId);
   if (!source || !fs.existsSync(source.path)) return 0;
   let count = 0;
-  for (const dataType of Object.keys((source.scan && source.scan.types) || {})) {
-    const localDir = path.join(resultsDir(sourceId), safeSegment(dataType));
-    const dirs = [localDir, path.join(CACHE_DIR, sourceId, dataType)];
-    for (const oldDir of dirs) {
-    if (!fs.existsSync(oldDir)) continue;
-    for (const file of fs.readdirSync(oldDir)) {
-      const parsed = parseLayerFile(file);
-      if (!parsed || !source.scan.types[dataType].layers.some((l) => l.key === parsed.layer)) continue;
-      const target = pngPath(sourceId, dataType, parsed.layer, parsed.variant);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      if (!fs.existsSync(target)) {
-        fs.copyFileSync(path.join(oldDir, file), target, fs.constants.COPYFILE_EXCL);
-        count++;
+  const tasks = Object.values(source.scan.tasks || {});
+  for (const task of tasks) {
+    for (const [dataType, type] of Object.entries(task.types)) {
+      const dirs = [path.join(resultsDir(sourceId), safeSegment(dataType)), path.join(CACHE_DIR, sourceId, dataType)];
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) continue;
+        for (const file of fs.readdirSync(dir).filter((n) => /\.png$/i.test(n))) {
+          const old = path.join(dir, file);
+          let meta;
+          try { meta = JSON.parse(fs.readFileSync(old + '.meta.json', 'utf8')); } catch { continue; }
+          const layer = type.layers.find((l) => {
+            const dem = path.join(task.predDir, type.flat || l.key === GROUND_LAYER ? '' : l.key, l.file || type.file);
+            return path.resolve(dem).toLowerCase() === path.resolve(meta.demPath).toLowerCase();
+          });
+          if (!layer) continue;
+          const variant = meta.variant || (parseLayerFile(file) || {}).variant || '';
+          const target = pngPath(sourceId, dataType, layer.key, variant, task.id);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          if (!fs.existsSync(target)) {
+            fs.copyFileSync(old, target, fs.constants.COPYFILE_EXCL);
+            count++;
+          }
+          if (!fs.existsSync(target + '.meta.json')) fs.copyFileSync(old + '.meta.json', target + '.meta.json', fs.constants.COPYFILE_EXCL);
+        }
       }
-      const oldMeta = path.join(oldDir, file + '.meta.json');
-      if (fs.existsSync(oldMeta) && !fs.existsSync(target + '.meta.json')) {
-        fs.copyFileSync(oldMeta, target + '.meta.json', fs.constants.COPYFILE_EXCL);
-      }
-      // 已迁入数据源的旧名图改为易读名称,原平台缓存仍保留。
-      if (oldDir === localDir && fs.existsSync(target + '.meta.json') &&
-          fs.readFileSync(path.join(oldDir, file)).equals(fs.readFileSync(target)) &&
-          fs.existsSync(oldMeta) && fs.readFileSync(oldMeta).equals(fs.readFileSync(target + '.meta.json'))) {
-        fs.unlinkSync(path.join(oldDir, file));
-        fs.unlinkSync(oldMeta);
-      }
-    }
     }
   }
   return count;

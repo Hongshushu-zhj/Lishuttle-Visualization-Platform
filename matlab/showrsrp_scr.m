@@ -91,8 +91,7 @@ if isfile(buildingfile)
         plot(polygon{1},polygon{2},'Color',[0.5 0.5 0.5],'LineWidth',0.8);
         if (digest{4} > 30)
             str = num2str(digest{4});
-            text(polygon{1}(1), polygon{2}(1), str, 'FontSize', 10, 'Color', [0.7 0.7
-                0.7]);
+            text(polygon{1}(1), polygon{2}(1), str, 'FontSize', 10, 'Color', [0.7 0.7 0.7]);
         end
     end
     fclose(fid);

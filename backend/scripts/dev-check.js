@@ -28,6 +28,14 @@ async function main() {
 function printSource(s) {
   console.log(`\n=== ${s.name}  (id=${s.id})${s.indoor ? '  [室内]' : ''}`);
   console.log(`    路径: ${s.path}    ${s.offline ? '[离线]' : ''}`);
+  for (const task of s.tasks || []) {
+    console.log(`    任务: ${task.name} [${task.indoor ? '室内' : '室外'}]`);
+    console.log(`    结果: ${task.resultsDir}`);
+    printTask(task);
+  }
+}
+
+function printTask(s) {
   console.log(`    坐标系: ${s.utm || (s.indoor ? '局部米制(室内)' : '-')}`);
   if (s.indoor) {
     console.log(`    墙线/建筑: ${s.wallsName ? s.wallsName + ' (' + s.wallsFile + ')' : '未找到(支持 walls.txt / *floor*.txt / out.txt)'}`);

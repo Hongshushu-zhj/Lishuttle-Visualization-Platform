@@ -1,5 +1,5 @@
 // 渲染自检:走完整 API 流程渲染一张图并报告结果(排查 MATLAB 绘图问题用)
-// 用法: node scripts/render-check.js [数据类型] [高度层] [数据源名关键字]
+// 用法: node scripts/render-check.js [数据类型] [高度层] [数据源名关键字] [任务名]
 //   默认 SCR / ground / 第一个含该类型的数据源;高度层用 all 可渲染全部层
 const BASE = process.env.PLATFORM_URL || 'http://127.0.0.1:8000';
 
@@ -27,7 +27,11 @@ async function main() {
     console.log(`没有匹配「${nameFilter}」的数据源。已注册: ${sources.map((s) => s.name).join(', ')}`);
     return;
   }
-  const source = pool.find((s) => s.types[dataType]) || pool[0];
+  const taskFilter = process.argv[5];
+  const tasks = pool.flatMap((s) => s.tasks.map((task) => ({ ...task, id: s.id, taskId: task.id, name: `${s.name} · ${task.name}` })))
+    .filter((task) => !taskFilter || task.taskId === taskFilter);
+  if (!tasks.length) throw new Error('没有匹配的任务');
+  const source = tasks.find((s) => s.types[dataType]) || tasks[0];
   const useType = source.types[dataType] ? dataType : Object.keys(source.types)[0];
   console.log(`数据源: ${source.name}${source.indoor ? '(室内)' : ''} | 类型: ${useType} | ${source.indoor ? '楼层' : '高度层'}: ${layer}`);
   if (source.indoor) {
@@ -35,7 +39,7 @@ async function main() {
   }
 
   const r = await post('/api/plot', {
-    requests: [{ sourceId: source.id, dataType: useType, layers: layer === 'all' ? ['all'] : [layer] }],
+    requests: [{ sourceId: source.id, taskId: source.taskId, dataType: useType, layers: layer === 'all' ? ['all'] : [layer] }],
     options: { coordMode: 'abs' },
   });
   if (r.error) {
@@ -43,6 +47,7 @@ async function main() {
     return;
   }
   console.log(`待绘图 ${r.figures.filter((f) => f.status === 'pending').length} 张,已缓存 ${r.figures.filter((f) => f.status === 'cached').length} 张`);
+  if (!r.figures.length) throw new Error('所选任务没有对应高度层的数据');
   console.log('图片 URL:', r.figures[0].url);
   if (!r.jobId) {
     console.log('无需启动 MATLAB(全部命中缓存)');

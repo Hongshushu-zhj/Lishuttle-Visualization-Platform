@@ -29,16 +29,16 @@
       <el-row :gutter="16">
         <el-col :span="9">
           <div class="field">
-            <div class="field__label">参与对比的数据源</div>
+            <div class="field__label">参与对比的数据源 / 任务</div>
             <el-select
               v-model="selectedSourceIds"
               multiple
               collapse-tags
               collapse-tags-tooltip
-              placeholder="请选择结果文件夹(可多选)"
+              placeholder="请选择数据源及任务(可多选)"
               style="width: 100%"
             >
-              <el-option v-for="s in state.sources" :key="s.id" :label="s.name" :value="s.id">
+              <el-option v-for="s in taskOptions" :key="s.id" :label="s.name" :value="s.id">
                 <span>{{ s.name }}</span>
                 <span class="muted" style="float: right">{{ knownTypes(s).map((t) => t.label).join('/') }}</span>
               </el-option>
@@ -103,13 +103,13 @@
       </el-row>
 
       <el-alert
-        v-if="state.sources.length < 2"
+        v-if="taskOptions.length < 2"
         type="info"
         :closable="false"
         show-icon
         style="margin-top: 10px"
-        title="对比至少需要 2 个数据源"
-        description="请通过「添加新的结果文件夹」把需要对比的项目结果都添加进来(例如不同方案/不同站点的仿真结果)。"
+        title="对比至少需要 2 个任务"
+        description="选择同一数据源内的不同任务,或添加其他结果文件夹进行跨源任务对比。"
       />
       <el-alert
         v-else-if="selectedSourceIds.length >= 2 && commonTypes.length === 0"
@@ -117,8 +117,8 @@
         :closable="false"
         show-icon
         style="margin-top: 10px"
-        title="所选数据源之间没有共同的数据类型,无法对比"
-        :description="`已选 ${selectedSourceIds.length} 个源,但它们的可绘图数据类型没有交集。请去掉数据类型不同的源,或改选其他数据源。`"
+        title="所选任务之间没有共同的数据类型,无法对比"
+        :description="`已选 ${selectedSourceIds.length} 个任务,但它们的可绘图数据类型没有交集。请改选具有共同数据类型的任务。`"
       />
 
       <el-progress
@@ -152,10 +152,10 @@
           <div>
             <span style="font-weight: 700">对比类型:{{ typeLabel }}</span>
             <span class="muted" style="margin-left: 10px">
-              行 = 高度层(由低到高),列 = 数据源;各图使用同一数值范围与色标,可直接横向比较
+              行 = 高度层(由低到高),列 = 数据源及任务;各图使用同一数值范围与色标,可直接横向比较
             </span>
           </div>
-          <div class="muted">共 {{ rows.length }} 层 × {{ columns.length }} 源 = {{ rows.length * columns.length }} 格</div>
+          <div class="muted">共 {{ rows.length }} 层 × {{ columns.length }} 任务 = {{ rows.length * columns.length }} 格</div>
         </div>
       </template>
 
@@ -210,7 +210,7 @@ import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Grid, MagicStick, Download, FolderAdd, Warning, Loading } from '@element-plus/icons-vue';
 import * as api from '../api';
-import { state, addSource, knownTypes } from '../store';
+import { addSource, knownTypes, taskSources } from '../store';
 import FigureCard from '../components/FigureCard.vue';
 import FolderPicker from '../components/FolderPicker.vue';
 import CoordModeSelect from '../components/CoordModeSelect.vue';
@@ -233,8 +233,9 @@ const elapsed = ref(0);
 let timer = null;
 let elapsedTimer = null;
 
+const taskOptions = computed(taskSources);
 const selectedSources = computed(() =>
-  state.sources.filter((s) => selectedSourceIds.value.includes(s.id))
+  taskOptions.value.filter((s) => selectedSourceIds.value.includes(s.id))
 );
 
 // 所有选中源都支持的可绘图类型(交集)
@@ -264,7 +265,7 @@ const layerOptions = computed(() => {
   const ordered = orderLayers(union);
   return ordered.map((k) => ({
     key: k,
-    label: layerLabel(k),
+    label: selectedSources.value[0]?.types[dataType.value]?.layers.find((l) => l.key === k)?.label || layerLabel(k),
     partial: !lists.every((l) => l.includes(k)),
   }));
 });
@@ -277,12 +278,12 @@ const typeLabel = computed(() => {
 // 类型选择框下方的说明文字:区分"源不够""无共同类型""正常"三种状态
 const typeHint = computed(() => {
   const n = selectedSourceIds.value.length;
-  if (n < 2) return '请至少选择 2 个数据源';
+  if (n < 2) return '请至少选择 2 个任务';
   if (commonTypes.value.length === 0) {
-    return '所选数据源之间没有共同的数据类型,无法对比 —— 请检查各结果文件夹包含的数据类型';
+    return '所选任务之间没有共同的数据类型,无法对比,请检查各任务包含的数据类型';
   }
   const names = commonTypes.value.map((t) => t.label).join(' / ');
-  return `共 ${n} 个源都含此类型,可选:${names}`;
+  return `共 ${n} 个任务都含此类型,可选:${names}`;
 });
 
 function layerLabel(k) {
@@ -317,12 +318,13 @@ const percent = computed(() => {
 });
 
 function cellOf(layerKey, sourceId) {
-  return cells.value.find((c) => c.layer === layerKey && c.sourceId === sourceId) || null;
+  return cells.value.find((c) => c.layer === layerKey && JSON.stringify([c.sourceId, c.taskId]) === sourceId) || null;
 }
 
 function buildRequests() {
   return selectedSources.value.map((s) => ({
-    sourceId: s.id,
+    sourceId: s.sourceId,
+    taskId: s.taskId,
     dataType: dataType.value,
     layers: selectedLayers.value,
   }));
@@ -450,7 +452,7 @@ async function onPick(path) {
   try {
     const s = await addSource(path);
     // 用新数组赋值触发 watch(ref 数组的原地 push 不会触发),否则类型/高度层不会自动选中
-    selectedSourceIds.value = [...selectedSourceIds.value, s.id];
+    selectedSourceIds.value = [...new Set([...selectedSourceIds.value, ...taskOptions.value.filter((t) => t.sourceId === s.id).map((t) => t.id)])];
     ElMessage.success(`已添加「${s.name}」并加入对比`);
   } catch (e) {
     ElMessageBox.alert(e.message, '添加失败', { type: 'error' });
@@ -459,9 +461,9 @@ async function onPick(path) {
 
 // 数据源列表变化时,清掉已失效的选择
 watch(
-  () => state.sources.map((s) => s.id).join(','),
+  () => taskOptions.value.map((s) => s.id).join(','),
   () => {
-    const ids = state.sources.map((s) => s.id);
+    const ids = taskOptions.value.map((s) => s.id);
     selectedSourceIds.value = selectedSourceIds.value.filter((id) => ids.includes(id));
   }
 );

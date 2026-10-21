@@ -18,6 +18,7 @@ function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
     const jobFile = path.join(jobDir, 'job.json');
     const taskFigures = figures.map((f) => ({
       preddir: f.preddir,
+      taskName: f.taskName || '',
       dataType: f.dataType,
       layer: f.layer === GROUND_LAYER ? '' : f.layer,
       layerLabel: f.layerLabel || '',

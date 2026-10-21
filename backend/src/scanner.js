@@ -3,7 +3,7 @@ const path = require('path');
 const { isKnown } = require('./plotTypes');
 const { isDirectoryEntry } = require('./fsutil');
 
-// 解析 pred/0/index.txt。两种格式都支持:
+// 解析 pred/<任务名>/index.txt。两种格式都支持:
 //   室外:首行 "UTM <zone>",其余每行 "文件名.dem 左 右 下 上 分辨率"
 //   室内:无 UTM 行,行可以是 "文件名.dem 左 右 下 上 分辨率" 或仅有 "左 右 下 上 分辨率" 5 个数
 function parseIndexFile(predDir) {
@@ -74,10 +74,10 @@ function splitIndoorName(baseName) {
   return { type: baseName.toUpperCase(), floor: null };
 }
 
-// 墙线/建筑文件:室内绘图必须叠加。按优先级在结果文件夹与 pred/0 下查找。
+// 墙线/建筑文件:室内绘图必须叠加。按优先级在结果文件夹与 pred/<任务名> 下查找。
 const WALL_CANDIDATES = ['walls.txt', 'wall.txt', 'building.txt'];
 function findWallFile(caseDir, predDir) {
-  const dirs = [caseDir, predDir];
+  const dirs = [predDir, caseDir];
   const byName = (dir, re) => {
     let names = [];
     try {
@@ -104,12 +104,35 @@ function findWallFile(caseDir, predDir) {
 // 扫描结果文件夹,自动识别可绘图的数据类型与高度层(室外)或楼层(室内)
 // 成功返回 { ok:true, utm, indoor, wallsFile, predDir, types:{ KEY:{key,file,known,bounds,flat,layers:[{key,label,file}]} } }
 function scanSource(caseDir) {
-  const predDir = path.join(caseDir, 'pred', '0');
+  const predRoot = path.join(caseDir, 'pred');
+  const tasks = Object.create(null);
+  const warnings = [];
+  try {
+    const entries = fs.readdirSync(predRoot, { withFileTypes: true })
+      .filter((entry) => isDirectoryEntry(predRoot, entry))
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
+    for (const entry of entries) {
+      try {
+        const task = scanTask(caseDir, path.join(predRoot, entry.name));
+        if (task.ok) tasks[entry.name] = { ...task, id: entry.name, name: entry.name };
+      } catch (e) {
+        warnings.push(`${entry.name}: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    return { ok: false, error: `无法读取任务目录 ${predRoot}: ${e.message}` };
+  }
+  const first = tasks['0'] || Object.values(tasks)[0];
+  if (!first) return { ok: false, error: `未在 ${predRoot} 的任务子目录中找到有效的 index.txt 与数据范围` };
+  return { ...first, tasks, warnings };
+}
+
+function scanTask(caseDir, predDir) {
   const parsed = parseIndexFile(predDir);
-  if (!parsed) {
+  if (!parsed || !parsed.entries.length) {
     return {
       ok: false,
-      error: `未找到 ${path.join(predDir, 'index.txt')} — 请选择正确的结果文件夹(需包含 pred\\0\\index.txt)`,
+      error: `未找到有效的 ${path.join(predDir, 'index.txt')}`,
     };
   }
   const { utm, indoor, entries } = parsed;
@@ -131,7 +154,7 @@ function scanSource(caseDir) {
   };
 }
 
-// 室外:类型来自 index.txt 的文件名,高度层来自 pred/0 下的子文件夹
+// 室外:类型来自 index.txt 的文件名,高度层来自 pred/<任务名> 下的子文件夹
 function scanOutdoor(predDir, entries, types) {
   let subdirs = [];
   try {
@@ -165,7 +188,7 @@ function scanOutdoor(predDir, entries, types) {
   }
 }
 
-// 室内:文件直接放在 pred/0 下,类型与楼层来自文件名(RSRP_1.dem → RSRP / 1层)
+// 室内:文件直接放在 pred/<任务名> 下,类型与楼层来自文件名(RSRP_1.dem → RSRP / 1层)
 // 若 index.txt 只有 5 个数(没有文件名列),则用目录中的 .dem 文件与同一组范围配对
 function scanIndoor(predDir, entries, types) {
   const bounds = entries.length ? boundsOf(entries[0]) : null;
@@ -191,7 +214,7 @@ function scanIndoor(predDir, entries, types) {
         file: e.file,
         known: isKnown(typeKey),
         indoor: true,
-        flat: true, // 数据文件直接位于 pred/0 下
+        flat: true, // 数据文件直接位于 pred/<任务名> 下
         bounds: e.left !== undefined ? boundsOf(e) : bounds,
         layers: [],
       };
@@ -216,4 +239,4 @@ function scanIndoor(predDir, entries, types) {
   }
 }
 
-module.exports = { scanSource, parseIndexFile };
+module.exports = { scanSource, scanTask, parseIndexFile };

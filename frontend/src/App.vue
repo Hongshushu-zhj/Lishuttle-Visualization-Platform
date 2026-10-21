@@ -6,7 +6,8 @@
         <span class="app-header__title">天线覆盖绘图平台</span>
         <span class="muted">基于 MATLAB 仿真结果自动出图</span>
       </div>
-      <div class="app-header__right">
+      <div class="app-header__right" style="display: flex; align-items: center; gap: 12px">
+        <GlobalColorRanges />
         <el-radio-group v-model="currentView" size="default">
           <el-radio-button value="plot">
             <el-icon><DataLine /></el-icon>&nbsp;画图展示
@@ -38,6 +39,7 @@
 import { onMounted, ref } from 'vue';
 import { state, loadSources } from './store';
 import PlotView from './views/PlotView.vue';
+import GlobalColorRanges from './components/GlobalColorRanges.vue';
 import CompareView from './views/CompareView.vue';
 
 const currentView = ref('plot');

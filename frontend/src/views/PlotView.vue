@@ -27,16 +27,16 @@
             v-for="s in group.sources"
             :key="s.id"
             class="src-item"
-            :class="{ 'src-item--offline': s.offline, 'src-item--selected': s.id === selectedSourceId }"
+            :class="{ 'src-item--offline': s.offline, 'src-item--selected': s.id === selectedSourceId && group.key === selectedGroup }"
           >
-            <button class="src-item__select" :aria-pressed="s.id === selectedSourceId" @click="selectedSourceId = s.id">
+            <button class="src-item__select" :aria-pressed="s.id === selectedSourceId && group.key === selectedGroup" @click="selectSource(s, group.key)">
             <div class="src-item__name" :title="s.path">
               <el-icon :color="s.offline ? '#f56c6c' : '#1f6feb'"><Folder /></el-icon>
               <span>{{ s.name }}</span>
-              <el-tag v-if="s.indoor" size="small" type="warning" effect="plain">室内</el-tag>
+              <el-tag v-if="group.key === 'indoor'" size="small" type="warning" effect="plain">室内</el-tag>
             </div>
             <div class="muted src-item__meta">
-              {{ knownTypes(s).map((t) => t.label).join(' / ') || '无可绘图数据' }}
+              {{ s.tasks.filter((task) => task.indoor === (group.key === 'indoor')).length }} 个任务
               <span v-if="s.offline" style="color: #f56c6c"> · 目录已丢失</span>
             </div>
             </button>
@@ -57,7 +57,7 @@
           <ol class="tips">
             <li>添加结果文件夹后,平台会自动识别其中可绘制的数据类型与高度层。</li>
             <li>在室内/室外分组中选择数据源,右侧切换到对应结果。</li>
-            <li>选择「数据类型」与「高度层/楼层」,点击「开始绘图」。</li>
+            <li>选择「任务」「数据类型」与「高度层/楼层」,点击「开始绘图」。</li>
             <li>图片按高度层依次展示,可单张下载、也可整包导出。</li>
             <li>结果图统一保存在各自结果文件夹下的「路损结果图」目录;仿真重跑后自动重新绘图。</li>
           </ol>
@@ -80,10 +80,11 @@
           :image-size="120"
         />
         <KeepAlive>
-          <SourceSection
+          <TaskSourceSection
             v-if="selectedSource"
-            :key="selectedSource.id + '-' + (refreshVersions[selectedSource.id] || 0)"
+            :key="selectedSource.id + '-' + selectedGroup + '-' + (refreshVersions[selectedSource.id] || 0)"
             :source="selectedSource"
+            :indoor="selectedGroup === 'indoor'"
             :coord-mode="coordMode"
             style="margin-bottom: 18px"
           />
@@ -99,19 +100,24 @@
 import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { FolderAdd, Folder, Refresh, Delete } from '@element-plus/icons-vue';
-import { state, addSource, removeSource, refreshSource, knownTypes } from '../store';
+import { state, addSource, removeSource, refreshSource } from '../store';
 import FolderPicker from '../components/FolderPicker.vue';
-import SourceSection from '../components/SourceSection.vue';
+import TaskSourceSection from '../components/TaskSourceSection.vue';
 import CoordModeSelect from '../components/CoordModeSelect.vue';
 
 const picker = ref(null);
 const coordMode = ref('abs');
 const selectedSourceId = ref('');
+const selectedGroup = ref('outdoor');
+function selectSource(source, group) {
+  selectedSourceId.value = source.id;
+  selectedGroup.value = group;
+}
 const refreshVersions = ref({});
 const selectedSource = computed(() => state.sources.find((s) => s.id === selectedSourceId.value));
 const sourceGroups = computed(() => [
-  { key: 'indoor', label: '室内', sources: state.sources.filter((s) => s.indoor) },
-  { key: 'outdoor', label: '室外', sources: state.sources.filter((s) => !s.indoor) },
+  { key: 'indoor', label: '室内', sources: state.sources.filter((s) => s.tasks?.some((task) => task.indoor)) },
+  { key: 'outdoor', label: '室外', sources: state.sources.filter((s) => s.tasks?.some((task) => !task.indoor)) },
 ]);
 
 watch(() => state.sources.map((s) => s.id), (ids) => {
@@ -121,9 +127,8 @@ watch(() => state.sources.map((s) => s.id), (ids) => {
 async function onPick(path) {
   try {
     const s = await addSource(path);
-    selectedSourceId.value = s.id;
-    const n = knownTypes(s).length;
-    ElMessage.success(`已添加「${s.name}」,识别到 ${n} 种可绘图数据`);
+    selectSource(s, s.tasks[0]?.indoor ? 'indoor' : 'outdoor');
+    ElMessage.success(`已添加「${s.name}」,识别到 ${s.tasks.length} 个任务`);
   } catch (e) {
     ElMessageBox.alert(e.message, '添加失败', { type: 'error' });
   }
@@ -133,6 +138,9 @@ async function doRefresh(s) {
   try {
     const r = await refreshSource(s.id);
     refreshVersions.value[s.id] = (refreshVersions.value[s.id] || 0) + 1;
+    if (selectedSourceId.value === s.id && !r.tasks.some((t) => t.indoor === (selectedGroup.value === 'indoor'))) {
+      selectedGroup.value = r.tasks[0]?.indoor ? 'indoor' : 'outdoor';
+    }
     ElMessage.success(`已重新识别「${r.name}」`);
   } catch (e) {
     ElMessage.error(e.message);

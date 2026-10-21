@@ -38,6 +38,17 @@ export async function refreshSource(id) {
   return s;
 }
 
+// 对比页以「数据源 + 任务」作为独立选项,支持同一数据源内跨任务对比。
+export function taskSources() {
+  return state.sources.flatMap((source) => (source.tasks || []).map((task) => ({
+    ...source, ...task,
+    id: JSON.stringify([source.id, task.id]),
+    sourceId: source.id,
+    taskId: task.id,
+    name: `${source.name} · 任务 ${task.name}`,
+  })));
+}
+
 // 已注册数据源中"可绘图"的数据类型
 export function knownTypes(source) {
   return Object.values(source.types || {}).filter((t) => t.known);

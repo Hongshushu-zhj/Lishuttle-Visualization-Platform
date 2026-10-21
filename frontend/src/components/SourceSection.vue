@@ -5,7 +5,7 @@
         <div>
           <div class="sec-head__title">
             <el-icon color="#1f6feb"><Folder /></el-icon>
-            <span>{{ source.name }}</span>
+            <span>{{ source.name }} · 任务 {{ source.taskName }}</span>
             <el-tag v-if="source.indoor" size="small" type="warning" effect="plain">室内</el-tag>
             <el-tag v-if="source.offline" type="danger" size="small">目录已丢失</el-tag>
             <el-tag v-else size="small" type="success" effect="plain">
@@ -48,7 +48,7 @@
       :closable="false"
       show-icon
       title="该文件夹中没有找到可绘图的数据"
-      description="请确认这是跑完仿真后的结果文件夹(内部含 pred\0\index.txt 与 .dem 文件)。"
+      description="请确认这是跑完仿真后的结果文件夹(内部含 pred\任务名\index.txt 与 .dem 文件)。"
     />
 
     <template v-else>
@@ -78,8 +78,8 @@
           <el-tooltip
             placement="right"
             :content="source.indoor
-              ? '室内数据文件位于 pred\\0 下,文件名的数字后缀为楼层(如 RSRP_1.dem → 1 层)'
-              : '地面数据位于 pred\\0 根目录,其余为对应高度层文件夹'"
+              ? '室内数据文件位于 当前任务目录下,文件名的数字后缀为楼层(如 RSRP_1.dem → 1 层)'
+              : '地面数据位于当前任务根目录,其余为对应高度层文件夹'"
           >
             <el-icon style="margin-left: 3px; vertical-align: -2px"><QuestionFilled /></el-icon>
           </el-tooltip>
@@ -205,7 +205,7 @@ const progressText = computed(() => {
 async function openFolder(type = '') {
   openingFolder.value = true;
   try {
-    await api.openResultsFolder(props.source.id, type);
+    await api.openResultsFolder(props.source.id, type, props.source.taskId);
     ElMessage.success(type ? `已打开 ${type} 结果文件夹` : '已打开结果文件夹');
   } catch (e) {
     ElMessage.error(e.message);
@@ -235,7 +235,7 @@ async function loadCached() {
   }
   try {
     const r = await api.plot(
-      [{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }],
+      [{ sourceId: props.source.id, taskId: props.source.taskId, dataType: dataType.value, layers: selectedLayers.value }],
       true,
       { coordMode: props.coordMode }
     );
@@ -258,7 +258,7 @@ async function startPlot() {
   }, 1000);
   try {
     const r = await api.plot(
-      [{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }],
+      [{ sourceId: props.source.id, taskId: props.source.taskId, dataType: dataType.value, layers: selectedLayers.value }],
       false,
       { coordMode: props.coordMode }
     );
@@ -338,7 +338,7 @@ function clearTimers() {
 async function exportAll() {
   try {
     const r = await api.exportZip(
-      [{ sourceId: props.source.id, dataType: dataType.value, layers: selectedLayers.value }],
+      [{ sourceId: props.source.id, taskId: props.source.taskId, dataType: dataType.value, layers: selectedLayers.value }],
       { coordMode: props.coordMode }
     );
     if (r.count < r.requested) {

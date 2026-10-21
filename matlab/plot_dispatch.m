@@ -64,7 +64,7 @@ if isfield(fig, 'layerLabel') && ~isempty(fig.layerLabel)
 end
 outFile = char(fig.outFile);
 
-% 来源文件夹名(用于标题标注):.../<源名>/pred/0
+% 来源文件夹名(用于标题标注):.../<源名>/pred/<任务名>
 [~, srcName] = fileparts(fileparts(fileparts(preddir)));
 
 % 标题:数据类型 (单位) @ 高度层/楼层 · 来源文件夹
@@ -83,6 +83,9 @@ else
 end
 if ~isempty(srcName)
     titleText = sprintf('%s · %s', titleText, srcName);
+end
+if isfield(fig, 'taskName') && ~isempty(fig.taskName)
+    titleText = sprintf('%s · 任务 %s', titleText, char(fig.taskName));
 end
 
 if isfield(fig, 'indoor') && logical(fig.indoor)

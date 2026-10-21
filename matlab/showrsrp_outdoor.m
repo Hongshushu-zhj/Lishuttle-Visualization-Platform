@@ -76,7 +76,7 @@ c = colorbar(ax); c.Label.String = label;
 end
 
 function drawOutdoorOverlays(ax, preddir, bounds)
-% 与原室外脚本一致,建筑与基站始终从 pred/0 读取。
+% 与原室外脚本一致,建筑与基站始终从 pred/<任务名> 读取。
 buildingFile = fullfile(preddir, 'building1');
 if isfile(buildingFile)
     fid = fopen(buildingFile, 'rt');

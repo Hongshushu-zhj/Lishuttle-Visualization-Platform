@@ -56,7 +56,7 @@ class JobQueue {
           f.status = 'done';
           job.done++;
           try {
-            cache.markCached(f.sourceId, f.dataType, f.layer, f.demFile, f.variant, f.axes || null);
+            cache.markCached(f.sourceId, f.dataType, f.layer, f.demFile, f.variant, f.axes || null, f.taskId);
           } catch (e) {
             // 缓存标记失败不影响绘图结果本身
           }

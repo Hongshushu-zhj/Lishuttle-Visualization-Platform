@@ -15,7 +15,7 @@ function createZip(figures) {
   for (const f of figures) {
     if (fs.existsSync(f.pngFile)) {
       archive.file(f.pngFile, {
-        name: path.join(f.sourceName, f.dataType, path.basename(f.pngFile)),
+        name: path.join(f.sourceName, f.taskName || '0', f.dataType, path.basename(f.pngFile)),
       });
     }
   }

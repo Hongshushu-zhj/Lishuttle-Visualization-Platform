@@ -7,6 +7,7 @@ const routes = require('./src/routes');
 
 const app = express();
 app.use(cors());
+app.use('/api/preview/save', express.json({ limit: '21mb' }));
 app.use(express.json({ limit: '2mb' }));
 app.use('/api', routes);
 
