@@ -6,6 +6,11 @@ export const analysisDefaults = {
 };
 export const analysisUnits = { RSRP: 'dBm', DLRSSINR: 'dB', SCR: 'dB', ECHORP: 'dBm', BESTSERVER: '' };
 
+// 当前分析页聚焦连续覆盖指标；小区归属解析保留供后续独立模块复用。
+export function availableAnalysisTypes(task) {
+  return Object.values(task?.types || {}).filter(type => type.known && Object.hasOwn(analysisDefaults, type.key));
+}
+
 export function validateConfig(config) {
   return !!config && Array.isArray(config.boundaries) && config.boundaries.length > 0 && config.boundaries.length <= 20 &&
     config.boundaries.every((v, i, a) => Number.isFinite(v) && (!i || v > a[i - 1])) && Number.isFinite(config.threshold);

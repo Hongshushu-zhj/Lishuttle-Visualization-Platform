@@ -9,6 +9,7 @@
         <label>楼层 / 高度层<el-select v-model="selectedLayers" multiple collapse-tags collapse-tags-tooltip placeholder="请选择层"><el-option v-for="l in availableLayers" :key="l.key" :label="l.label" :value="l.key" /></el-select></label>
       </div>
       <div class="source-actions"><el-button link type="primary" @click="picker.open()">添加结果文件夹</el-button><el-button link :disabled="!sourceId" @click="refresh">刷新当前数据源</el-button><span class="muted">不需要先绘图；统计区间与绘图色标相互独立。</span></div>
+      <el-alert v-if="task?.types?.BESTSERVER" type="info" title="BESTSERVER 为小区编号数据，暂不纳入结果分析。" description="仍可在画图展示和结果对比中查看；本页聚焦 RSRP、DLRSSINR、SCR、ECHORP 的数值分布。" :closable="false" show-icon />
       <template v-if="dataType && !categorical">
         <el-divider />
         <div class="section-head"><strong>分析区间配置 <small>{{ unit }}</small></strong><span class="muted">仅为分析起点，可根据业务标准调整</span></div>
@@ -21,7 +22,7 @@
 
     <el-alert v-if="error" type="error" :title="error" show-icon :closable="false" />
     <el-alert v-if="stale" type="warning" title="分析条件或数据源已变化，请重新分析。" description="旧结果已隐藏，防止与当前选择混淆。" show-icon :closable="false" />
-    <el-empty v-if="!snapshot && !loading" description="选择数据源、任务与指标，开始分析各层覆盖分布" />
+    <el-empty v-if="!snapshot && !loading" :description="task && !types.length ? '当前任务没有支持结果分析的连续指标，请切换任务或添加数据源' : '选择数据源、任务与指标，开始分析各层覆盖分布'" />
     <template v-if="snapshot && !stale">
       <el-card shadow="never">
         <div class="section-head"><div><strong>{{ snapshot.sourceName }} · 任务 {{ snapshot.taskName }} · {{ snapshot.dataType }}</strong><div class="muted">{{ new Date(snapshot.analyzedAt).toLocaleString() }} · {{ snapshot.indoor ? '室内' : '室外' }} · 共 {{ rows.length }} 层</div></div><div class="exports"><el-button @click="exportCsv(false)">导出统计汇总 CSV</el-button><el-button @click="exportCsv(true)">{{ categorical ? '导出小区明细 CSV' : '导出分档明细 CSV' }}</el-button></div></div>
@@ -77,10 +78,10 @@
 <script setup>
 import { computed, ref, shallowRef, watch, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
-import { state, knownTypes, addSource, refreshSource } from '../store';
+import { state, addSource, refreshSource } from '../store';
 import { analyzeResults } from '../api';
 import { analysisConfig, saveAnalysisConfig } from '../analysisConfig';
-import { analysisDefaults, analysisUnits, validateConfig, deriveLayer, histogram, topCategories, csvText, exportRows } from '../analysisModel.mjs';
+import { analysisDefaults, analysisUnits, validateConfig, deriveLayer, histogram, topCategories, csvText, exportRows, availableAnalysisTypes } from '../analysisModel.mjs';
 import AnalysisChart from '../components/AnalysisChart.vue';
 import FolderPicker from '../components/FolderPicker.vue';
 
@@ -89,7 +90,7 @@ const snapshot = shallowRef(null), loading = ref(false), error = ref(''), picker
 const source = computed(() => state.sources.find(s => s.id === sourceId.value));
 const tasks = computed(() => source.value?.tasks || []);
 const task = computed(() => tasks.value.find(t => t.id === taskId.value));
-const types = computed(() => knownTypes(task.value || {}));
+const types = computed(() => availableAnalysisTypes(task.value));
 const availableLayers = computed(() => task.value?.types[dataType.value]?.layers || []);
 const categorical = computed(() => dataType.value === 'BESTSERVER');
 const unit = computed(() => analysisUnits[dataType.value] || '');

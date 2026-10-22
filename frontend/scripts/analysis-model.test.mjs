@@ -1,8 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveLayer, validateConfig, histogram, topCategories, csvText, exportRows } from '../src/analysisModel.mjs';
+import { deriveLayer, validateConfig, histogram, topCategories, csvText, exportRows, availableAnalysisTypes } from '../src/analysisModel.mjs';
 
 const layer = { validCount: 5, totalCount: 6, divisor: 100, resolution: 2, frequencies: [[-11000, 1], [-10000, 2], [-9000, 1], [-8000, 1]] };
+test('结果分析暂不提供 BESTSERVER，保持原始绘图类型完整', () => {
+  const task = { types: Object.fromEntries(['BESTSERVER', 'RSRP', 'DLRSSINR', 'SCR', 'ECHORP', 'UNKNOWN'].map(key => [key, { key, known: true }])) };
+  assert.deepEqual(availableAnalysisTypes(task).map(t => t.key), ['RSRP', 'DLRSSINR', 'SCR', 'ECHORP']);
+  assert.ok(task.types.BESTSERVER);
+  assert.deepEqual(availableAnalysisTypes({ types: { BESTSERVER: task.types.BESTSERVER } }), []);
+  assert.deepEqual(availableAnalysisTypes(), []);
+});
 test('分档左闭右开且包含两端，门限值计入达标，面积按分辨率平方', () => {
   const result = deriveLayer(layer, { boundaries: [-110, -100, -90], threshold: -100 });
   assert.deepEqual(result.bins.map(b => b.count), [0, 1, 2, 2]);
