@@ -130,7 +130,28 @@ D:/仿真结果/案例A/pred/任务A/RSRP_1.dem
 
 单图实时调色继续保留,进入时继承全局范围,单独调整不会自动改动全局配置；「装配全局范围」可随时还原。只有明确点击保存为全局才影响其他图。下载当前调整效果请使用交互窗口内的预览下载/保存按钮；原图下载和 ZIP 导出仍使用 MATLAB 图片。
 
-## 4. 手动运行与检查（可选）
+## 4. 覆盖结果分析
+
+顶部 **“结果分析”** 支持一个数据源、一个任务的多楼层/高度层统计，包括 RSRP、DLRSSINR、SCR、ECHORP 和 BESTSERVER。选择任务、指标与层，点击“开始分析”；不需要先生成 MATLAB 图片。
+
+- 连续指标展示各层区间占比 100% 堆叠图、有效点达标率图、统计明细，以及当前层的区间环形图、数值直方图和分档表。
+- 可分别编辑各指标分界值与达标门限，点击“应用并保存配置”即时重算，无需重新读取 DEM；配置仅保存在当前浏览器，与全局绘图色标互不影响。预置分档仅作分析起点，不代表行业等级标准。
+- 当前层选择、统计概览、该层分布图及明细连续展示，层间对比与各层统计表放在其后；点击各层统计表中的行会选择该层并滚动返回当前层概览。
+- BESTSERVER 按原始小区编号统计点数、占比与估算服务面积；独立概览及各层表展示有效小区数、主导小区（保留并列）、主导小区占比、前三小区合计占比及有效归属估算面积。主导占比是单个小区的最大占比，前三占比按点数取前三个小区。它们描述归属集中程度，不代表用户负载或信号质量，不能据此判断干扰或切换质量。
+- BESTSERVER 图表展示前十及“其他”，分页明细保留全部编号；没有有效点时主导小区及集中占比为空。该指标的页面与 CSV 使用独立分类字段，不计算或导出编号均值、分位数、连续分档或门限。
+- 支持统计汇总 CSV、分档明细 CSV（UTF-8 BOM）及各图 PNG 下载，导出内容注明来源、任务、指标、层及当前配置。切换条件后隐藏旧结果，需重新分析；源文件更新后点击分析会校验缓存，新增/删除层可先刷新数据源。
+
+### 统计口径
+
+统计完整 int16 DEM，不使用交互预览的降采样数据。连续指标除以 100，BESTSERVER 保留整数。`-32768` 为无效；室外 DLRSSINR 同时排除 `0`（沿用现有数据约定），室内 DLRSSINR 和其他指标的零值保留。
+
+区间占比与达标率都以**本层有效点数**为分母；另外展示“有效点/全部点”的数据有效率。无效点不直接解释为覆盖失败。区间左闭右开，自动包含最小分界以下与最大分界以上；门限采用 `≥`。均值是 dB/dBm 数值的算术平均，P10、中位数、P90 使用最近秩法。没有有效数据时展示空态，不给出虚假的 0% 达标结论。
+
+估算面积 = 点数 × 分辨率²，属于栅格估算面积；没有目标区域掩膜，不代表精确建筑内面积，不跨层相加为实际覆盖面积或体积。
+
+后端 `POST /api/analysis` 输入 `{sourceId, taskId, dataType, layers}`，返回各层基础统计与完整原始整数频数；单层缺失、空文件或尺寸错误不影响其他层。最多选择 256 层，最多两个工作线程并行处理，内存缓存上限 32 MiB / 64 层，按源文件、索引、范围及规则版本失效。
+
+## 5. 手动运行与检查（可选）
 
 以下命令在项目根目录分别执行：
 
@@ -149,5 +170,9 @@ node backend/server.js
 node backend/scripts/verify-cache-compatibility.js
 node backend/scripts/verify-multi-task.js
 node backend/scripts/verify-raster-preview.js
+node backend/scripts/verify-analysis.js
+node --test frontend/scripts/analysis-model.test.mjs
 matlab -batch "addpath('backend/scripts'); verify_matlab_compatibility"
 ```
+
+新增分析也可分别运行 `npm --prefix backend run test:analysis`、`npm --prefix frontend run test:analysis`。可选浏览器回归脚本为 `node backend/scripts/verify-analysis-ui.js`，需先构建前端，并在测试环境提供 Playwright 与 Chromium；可通过 `PLAYWRIGHT_MODULE_PATH`、`PLAYWRIGHT_EXECUTABLE_PATH` 指定已有模块及浏览器。该脚本使用临时数据与随机端口，不修改实际数据源注册表。
