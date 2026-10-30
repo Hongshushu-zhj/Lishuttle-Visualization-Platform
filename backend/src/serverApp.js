@@ -26,12 +26,12 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   const supervisor = createProcessSupervisor({ stateDir: path.join(paths.dataDir, 'processes') });
   const environment = createMatlabEnvironment({ paths, supervisor, settingsStore });
   const runner = createMatlabRunner({ ...runtime, supervisor });
-  const jobs = createJobQueue({ ...runtime, ...runner, cache });
+  const jobs = createJobQueue({ ...runtime, ...runner, cache, supervisor });
   const analysis = createAnalysisService({ store: sourcesStore });
   const exporter = createExporter(runtime);
   const folders = createOpenResultsFolder({ sourcesStore, cache });
   const app = express(); app.disable('x-powered-by');
-  let server, origin, closing;
+  let server, origin, closing, closingRequested = false;
   app.use((req, res, next) => {
     if (req.headers.host !== (origin && new URL(origin).host)) return res.status(403).json({ error: '本机地址校验失败' });
     const requestOrigin = req.headers.origin;
@@ -52,11 +52,12 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
     }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'");
+    if (closingRequested && !['GET', 'HEAD'].includes(req.method)) return res.status(503).json({ error: '应用正在退出，请等待清理完成', code: 'APP_CLOSING' });
     next();
   });
   app.use('/api/preview/save', express.json({ limit: '21mb' }));
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api', createDesktopRoutes({ settingsStore, environment, paths, sourcesStore }));
+  app.use('/api', createDesktopRoutes({ settingsStore, environment, paths, sourcesStore, jobs }));
   app.use('/api', createRoutes({ ...runtime, sourcesStore, jobQueue: jobs, cache, exporter, ...analysis, ...folders }));
   app.use(express.static(paths.frontendDir));
   app.get('*', (req, res) => {
@@ -68,9 +69,12 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   app.use((error, req, res, next) => { res.status(error.status || 500).json({ error: error.message }); });
   return {
     app, jobs, paths, settingsStore, sourcesStore, environment, supervisor,
-    listen({ host = '127.0.0.1', port = 0 } = {}) {
+    getActivity: () => ({ active: jobs.hasActive() || environment.isActive() || supervisor.isBusy(), jobs: jobs.list().filter(job => ['queued', 'running', 'cancelling'].includes(job.status)).length,
+      detecting: environment.isActive(), blocked: jobs.getBlockedReason() }),
+    async listen({ host = '127.0.0.1', port = 0 } = {}) {
       if (host !== '127.0.0.1') return Promise.reject(new Error('仅允许绑定本机回环地址'));
       if (server) return Promise.reject(new Error('服务已经启动'));
+      await supervisor.initialize();
       return new Promise((resolve, reject) => {
         server = app.listen(port, host, () => { origin = `http://${host}:${server.address().port}`; resolve({ origin }); });
         server.once('error', reject);
@@ -78,11 +82,19 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
     },
     close() {
       if (closing) return closing;
-      closing = new Promise((resolve, reject) => {
+      closingRequested = true;
+      closing = (async () => {
+        const results = await Promise.allSettled([jobs.shutdown(), environment.cancelAndWait()]);
+        await supervisor.waitForIdle().catch(() => {});
+        const failure = results.find(result => result.status === 'rejected');
+        if (failure) throw failure.reason;
+        if (supervisor.isBusy()) throw new Error('MATLAB 所属进程退出尚未确认，请保留应用并查看日志');
+        await new Promise((resolve, reject) => {
         if (!server || !server.listening) return resolve();
         server.close(error => error ? reject(error) : resolve());
         server.closeAllConnections();
-      });
+        });
+      })().catch(error => { closing = undefined; throw error; });
       return closing;
     },
   };

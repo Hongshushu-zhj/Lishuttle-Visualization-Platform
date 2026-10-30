@@ -99,8 +99,9 @@
       </div>
 
       <!-- 进度 -->
+      <JobStatus :job="currentJob" @update="currentJob = $event" @retry="resumeJob" />
       <el-progress
-        v-if="plotting || justFinished"
+        v-if="!currentJob && (plotting || justFinished)"
         :percentage="percent"
         :status="progressStatus"
         :stroke-width="14"
@@ -150,6 +151,8 @@ import {
 import * as api from '../api';
 import FigureCard from './FigureCard.vue';
 import { ensurePlotReady } from '../desktopState';
+import JobStatus from './JobStatus.vue';
+import { terminalJobStates } from '../jobModel.mjs';
 
 const props = defineProps({
   source: { type: Object, required: true },
@@ -176,11 +179,14 @@ const openingFolder = ref(false);
 const justFinished = ref(false);
 const jobError = ref('');
 const progress = ref({ done: 0, total: 0, status: '' });
+const currentJob = ref(null);
 const startedAt = ref(0);
 const elapsed = ref(0);
 let timer = null;
 let elapsedTimer = null;
 let cacheRequest = 0;
+let retryBase = [];
+function mergeRetry(figures) { const byKey = new Map(figures.map(f => [f.key, f])); return [...retryBase.map(f => byKey.get(f.key) || f), ...figures.filter(f => !retryBase.some(old => old.key === f.key))]; }
 
 const currentType = computed(() => allTypes.value.find((t) => t.key === dataType.value) || null);
 const currentLayers = computed(() => (currentType.value ? currentType.value.layers : []));
@@ -248,6 +254,8 @@ async function loadCached() {
 
 async function startPlot() {
   if (!ensurePlotReady()) return;
+  currentJob.value = null;
+  retryBase = [];
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;
@@ -284,12 +292,13 @@ function pollJob(jobId) {
     timer = setInterval(async () => {
       try {
         const st = await api.getJob(jobId);
+        currentJob.value = st;
         progress.value = { done: st.done, total: st.total, status: st.status };
-        figures.value = st.figures;
-        if (st.status === 'done' || st.status === 'failed') {
+        figures.value = mergeRetry(st.figures);
+        if (terminalJobStates.has(st.status)) {
           clearInterval(timer);
           timer = null;
-          if (st.status === 'failed') {
+          if (st.status !== 'done') {
             jobError.value = st.error || 'MATLAB 绘图失败';
           }
           version.value = Date.now(); // 刷新浏览器图片缓存
@@ -311,6 +320,11 @@ function pollJob(jobId) {
       }
     }, 1500);
   });
+}
+
+async function resumeJob(job) {
+  clearTimers(); retryBase = figures.value; currentJob.value = job; figures.value = mergeRetry(job.figures); plotting.value = true; jobError.value = '';
+  await pollJob(job.id);
 }
 
 function finishSuccess(allCached) {

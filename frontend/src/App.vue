@@ -9,6 +9,7 @@
       <div class="app-header__right" style="display: flex; align-items: center; gap: 12px">
         <el-button link :type="desktop.isReady() ? 'success' : 'warning'" @click="desktop.state.open = true">{{ environmentLabel(desktop.state.environment) }}</el-button>
         <el-button @click="desktop.state.open = true">应用设置</el-button>
+        <el-button @click="history.open()">任务记录</el-button>
         <GlobalColorRanges />
         <el-radio-group v-model="currentView" size="default">
           <el-radio-button value="plot">
@@ -42,6 +43,7 @@
   </el-container>
   <AppSettings />
   <FirstRunWizard />
+  <JobHistory ref="history" />
 </template>
 
 <script setup>
@@ -52,11 +54,13 @@ import GlobalColorRanges from './components/GlobalColorRanges.vue';
 import CompareView from './views/CompareView.vue';
 import AppSettings from './components/AppSettings.vue';
 import FirstRunWizard from './components/FirstRunWizard.vue';
+import JobHistory from './components/JobHistory.vue';
 import { desktop } from './desktopState';
 import { desktopBridge } from './desktopBridge';
 import { environmentLabel } from './desktopModel.mjs';
 
 const currentView = ref('plot');
+const history = ref(null);
 const AnalysisView = defineAsyncComponent(() => import('./views/AnalysisView.vue'));
 const analysisOpened = ref(false);
 watch(currentView, view => { if (view === 'analysis') analysisOpened.value = true; });
@@ -97,5 +101,9 @@ onUnmounted(() => clearInterval(poll));
 .app-header__title {
   font-size: 17px;
   font-weight: 700;
+}
+@media (max-width: 1320px) {
+  .app-header { height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+  .app-header__right { flex-wrap: wrap; }
 }
 </style>

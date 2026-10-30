@@ -87,6 +87,6 @@ function createProcessSupervisor({ stateDir }) {
     })().catch(error => { if (fs.existsSync(markerFile)) blocked = error.message; throw error; }).finally(() => { active = null; });
     return lastRun;
   }
-  return { run, isBusy, recover, waitForIdle: () => lastRun, cancelAll: () => active?.stop?.('cancelled'), getBlockedReason: () => blocked };
+  return { run, isBusy, recover, initialize: async () => { try { await recover(); } catch (error) { blocked = error.message; } }, waitForIdle: () => lastRun, cancelAll: () => active?.stop?.('cancelled'), getBlockedReason: () => blocked };
 }
 module.exports = { createProcessSupervisor };

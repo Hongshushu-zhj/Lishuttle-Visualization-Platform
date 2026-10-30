@@ -28,7 +28,15 @@ else {
     if (acceptanceActive) return;
     if (shuttingDown) return;
     shuttingDown = true;
-    Promise.resolve(backend?.stop()).then(() => { allowQuit = true; app.quit(); }).catch(async error => {
+    (async () => {
+      const activity = await backend?.getActivity();
+      if (activity?.active) {
+        const result = await dialog.showMessageBox(window, { type: 'question', title: '有任务正在运行', message: '检测或绘图任务尚未结束，是否取消并退出？',
+          detail: '应用会取消排队任务并等待本次 MATLAB 所属进程全部停止。已经完成的图片会保留。', buttons: ['留在应用', '取消任务并退出'], defaultId: 0, cancelId: 0 });
+        if (result.response !== 1) { shuttingDown = false; return; }
+      }
+      await backend?.stop(); allowQuit = true; app.quit();
+    })().catch(async error => {
       shuttingDown = false;
       await dialog.showMessageBox(window, { type: 'error', title: '退出未完成', message: error.message, buttons: ['留在应用'] });
     });
@@ -41,6 +49,7 @@ function makeWindow(appSession) {
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), session: appSession,
       nodeIntegration: false, contextIsolation: true, sandbox: true } });
   w.removeMenu();
+  w.on('close', event => { if (!allowQuit) { event.preventDefault(); app.quit(); } });
   w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   w.webContents.on('will-navigate', (event, url) => {
     try { if (new URL(url).origin !== origin) event.preventDefault(); } catch { event.preventDefault(); }

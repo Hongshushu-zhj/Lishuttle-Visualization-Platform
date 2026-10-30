@@ -251,19 +251,33 @@ router.post('/plot', (req, res) => {
   }
 });
 
+function pubJob(job) { return { id: job.id, status: job.status, createdAt: job.createdAt, finishedAt: job.finishedAt,
+  total: job.total, done: job.done, failed: job.failed, cancelled: job.cancelled, counts: job.counts,
+  matlabVersion: job.matlabVersion || null, error: job.error, errorDetails: job.errorDetails, figures: job.figures.map(pubFigure) }; }
+router.get('/jobs', (req, res) => res.json(jobQueue.list().map(pubJob)));
+router.post('/jobs/:id/cancel', (req, res, next) => { try { res.json(pubJob(jobQueue.cancel(req.params.id))); } catch (error) { next(error); } });
+router.post('/jobs/:id/retry', (req, res, next) => {
+  try {
+    const previous = jobQueue.get(req.params.id); if (!previous) throw httpErr(404, '任务不存在');
+    if (!['partial', 'failed', 'cancelled', 'timed_out', 'interrupted'].includes(previous.status)) throw httpErr(409, '任务尚未结束或无需重试');
+    const retry = previous.figures.filter(f => !['done', 'cached'].includes(f.status));
+    const requests = retry.map(f => ({ sourceId: f.sourceId, taskId: f.taskId, dataType: f.dataType, layers: [f.layer] }));
+    const available = buildFigures(requests);
+    const figures = available.map(f => {
+      const old = retry.find(entry => entry.key === f.key);
+      for (const key of ['coordMode', 'xlim', 'ylim', 'variant']) if (old?.[key] !== undefined) f[key] = old[key];
+      f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
+      f.url = `/api/images/${f.sourceId}/${f.dataType}/${cache.layerFileName(f.layer, f.variant)}?taskId=${encodeURIComponent(f.taskId)}`;
+      return f;
+    });
+    if (!figures.length) throw httpErr(400, '原失败层的数据已不可用，请重新选择数据');
+    res.json(pubJob(jobQueue.create(figures)));
+  } catch (error) { next(error); }
+});
 router.get('/jobs/:id', (req, res) => {
   const job = jobQueue.get(req.params.id);
   if (!job) return res.status(404).json({ error: '任务不存在' });
-  res.json({
-    id: job.id,
-    status: job.status,
-    total: job.total,
-    done: job.done,
-    failed: job.failed,
-    matlabVersion: job.matlabVersion || null,
-    error: job.error,
-    figures: job.figures.map(pubFigure),
-  });
+  res.json(pubJob(job));
 });
 
 // 交互预览只读取 DEM,不会创建 MATLAB 任务。

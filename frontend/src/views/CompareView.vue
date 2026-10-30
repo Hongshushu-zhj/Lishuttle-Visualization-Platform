@@ -121,8 +121,9 @@
         :description="`已选 ${selectedSourceIds.length} 个任务,但它们的可绘图数据类型没有交集。请改选具有共同数据类型的任务。`"
       />
 
+      <JobStatus :job="currentJob" @update="currentJob = $event" @retry="resumeJob" />
       <el-progress
-        v-if="plotting || justFinished"
+        v-if="!currentJob && (plotting || justFinished)"
         :percentage="percent"
         :status="jobError ? 'exception' : (!plotting && justFinished ? 'success' : '')"
         :stroke-width="14"
@@ -211,6 +212,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Grid, MagicStick, Download, FolderAdd, Warning, Loading } from '@element-plus/icons-vue';
 import * as api from '../api';
 import { ensurePlotReady } from '../desktopState';
+import JobStatus from '../components/JobStatus.vue';
+import { terminalJobStates } from '../jobModel.mjs';
 import { addSource, knownTypes, taskSources } from '../store';
 import FigureCard from '../components/FigureCard.vue';
 import FolderPicker from '../components/FolderPicker.vue';
@@ -230,6 +233,9 @@ const plotting = ref(false);
 const justFinished = ref(false);
 const jobError = ref('');
 const progress = ref({ done: 0, total: 0, status: '' });
+const currentJob = ref(null);
+let retryBase = [];
+function mergeRetry(figures) { const byKey = new Map(figures.map(f => [f.key, f])); return [...retryBase.map(f => byKey.get(f.key) || f), ...figures.filter(f => !retryBase.some(old => old.key === f.key))]; }
 const elapsed = ref(0);
 let timer = null;
 let elapsedTimer = null;
@@ -361,6 +367,8 @@ async function refreshGrid(dryRun = true) {
 
 async function run() {
   if (!ensurePlotReady()) return;
+  currentJob.value = null;
+  retryBase = [];
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;
@@ -389,13 +397,14 @@ function pollJob(jobId) {
     timer = setInterval(async () => {
       try {
         const st = await api.getJob(jobId);
+        currentJob.value = st;
         progress.value = { done: st.done, total: st.total, status: st.status };
-        cells.value = st.figures;
-        if (st.status === 'done' || st.status === 'failed') {
+        cells.value = mergeRetry(st.figures);
+        if (terminalJobStates.has(st.status)) {
           clearInterval(timer);
           timer = null;
           version.value = Date.now();
-          if (st.status === 'failed') jobError.value = st.error || 'MATLAB 绘图失败';
+          if (st.status !== 'done') { jobError.value = st.error || '任务未全部完成'; plotting.value = false; clearTimers(); }
           else finish(false);
           resolve();
         }
@@ -409,6 +418,11 @@ function pollJob(jobId) {
       }
     }, 1500);
   });
+}
+
+async function resumeJob(job) {
+  clearTimers(); retryBase = cells.value; currentJob.value = job; cells.value = mergeRetry(job.figures); plotting.value = true; jobError.value = '';
+  await pollJob(job.id);
 }
 
 function finish(allCached) {

@@ -33,6 +33,7 @@ function createMatlabEnvironment({ paths, supervisor, settingsStore }) {
   }
   const getDetection = id => { const record = records.get(id); if (!record) throw invalid('检测记录不存在', 'DETECTION_NOT_FOUND'); return structuredClone(record); };
   function getState(executable = settingsStore?.get().matlabExe || '') {
+    if (supervisor.getBlockedReason?.()) return { status: 'failed', executable, error: { code: 'PROCESS_CLEANUP_UNCONFIRMED', message: supervisor.getBlockedReason(), retryable: false } };
     if (!executable) return { status: 'not_configured', executable: '' };
     if (active?.record.executable === executable) return structuredClone(active.record);
     const latest = [...records.values()].reverse().find(record => record.executable === executable);

@@ -6,7 +6,7 @@ const { createJsonStore } = require('./jsonStore');
 const { scanSource } = require('./scanner');
 const { importLegacyDirectory } = require('./legacyImport');
 const { validateMatlabExecutable } = require('./matlabEnvironment');
-function createDesktopRoutes({ settingsStore, environment, paths, sourcesStore }) {
+function createDesktopRoutes({ settingsStore, environment, paths, sourcesStore, jobs }) {
   const router = express.Router();
   for (const [route, read, update] of [['settings', 'get', 'update'], ['preferences', 'getPreferences', 'updatePreferences']]) {
     if (typeof settingsStore?.[read] !== 'function' || typeof settingsStore?.[update] !== 'function') continue;
@@ -23,6 +23,7 @@ function createDesktopRoutes({ settingsStore, environment, paths, sourcesStore }
     router.get('/environment/check/:id', (req, res, next) => { try { res.json(environment.getDetection(req.params.id)); } catch (error) { next(error); } });
     router.post('/environment/check/:id/cancel', (req, res, next) => { try { res.json(environment.cancelDetection(req.params.id)); } catch (error) { next(error); } });
   }
+  if (jobs) router.get('/runtime', (req, res) => res.json({ active: jobs.hasActive() || environment?.isActive(), blocked: jobs.getBlockedReason() }));
   if (paths && sourcesStore) {
     const onboarding = createJsonStore({ file: path.join(paths.dataDir, 'onboarding.json'), defaults: { schemaVersion: 1, completed: false }, validate(value) {
       if (!value || value.schemaVersion !== 1 || typeof value.completed !== 'boolean') throw Object.assign(new Error('引导记录无效'), { code: 'INVALID_CONFIG' }); return value;

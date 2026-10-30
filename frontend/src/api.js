@@ -47,6 +47,9 @@ export const listDir = (path) => req(`/fs/list?path=${encodeURIComponent(path)}`
 export const plot = (requests, dryRun = false, options = {}) =>
   req('/plot', { method: 'POST', body: JSON.stringify({ requests, dryRun, options }) });
 export const getJob = (id) => req(`/jobs/${id}`);
+export const listJobs = () => req('/jobs');
+export const cancelJob = id => req(`/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+export const retryJob = id => req(`/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' });
 export const analyzeResults = (request) => req('/analysis', { method: 'POST', body: JSON.stringify(request) });
 export const loadRasterPreview = (fig) => req('/preview', { method: 'POST', body: JSON.stringify({
   sourceId: fig.sourceId, taskId: fig.taskId, dataType: fig.dataType, layer: fig.layer,
