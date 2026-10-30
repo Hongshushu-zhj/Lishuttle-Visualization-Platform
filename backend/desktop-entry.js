@@ -1,4 +1,5 @@
 const { createServer } = require('./src/serverApp');
+const { createSettingsStore } = require('./src/settingsStore');
 let service, bootstrapped = false;
 const port = process.parentPort;
 if (!port) throw new Error('桌面后端必须由 Electron utilityProcess 启动');
@@ -9,7 +10,8 @@ port.on('message', async event => {
       bootstrapped = true;
       if (message.failForTest) throw new Error('测试启动失败');
       service = createServer({ paths: message.paths, sessionSecret: message.sessionSecret,
-        sessionCookieName: message.sessionCookieName, settingsStore: { get: () => message.settings } });
+        sessionCookieName: message.sessionCookieName,
+        settingsStore: createSettingsStore({ paths: message.paths, initialSettings: message.settings || {} }) });
       const { origin } = await service.listen({ host: '127.0.0.1', port: 0 });
       port.postMessage({ type: 'ready', origin });
     } else if (message.type === 'shutdown') {

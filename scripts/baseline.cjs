@@ -1,6 +1,7 @@
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const root = path.resolve(__dirname, '..');
 const commands = [
   ['backend/scripts/verify-cache-compatibility.js'],
@@ -12,9 +13,12 @@ const commands = [
   ['--test', 'desktop/tests/fixtures.test.cjs'],
 ];
 const results = commands.map(args => {
-  const r = spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8' });
-  process.stdout.write(r.stdout || ''); process.stderr.write(r.stderr || '');
-  return { command: ['node', ...args].join(' '), exitCode: r.status, signal: r.signal, output: r.stdout + r.stderr };
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'antenna-baseline-data-'));
+  try {
+    const r = spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', env: { ...process.env, ANTENNA_DESKTOP_DATA_DIR: dataDir } });
+    process.stdout.write(r.stdout || ''); process.stderr.write(r.stderr || '');
+    return { command: ['node', ...args].join(' '), exitCode: r.status, signal: r.signal, output: r.stdout + r.stderr };
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 const target = path.join(root, '.desktop-test-data', 'baseline-results.json');
 fs.mkdirSync(path.dirname(target), { recursive: true });

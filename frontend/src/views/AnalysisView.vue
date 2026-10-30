@@ -113,14 +113,14 @@ watch(types, () => { if (!types.value.some(t => t.key === dataType.value)) dataT
 watch([sourceId, taskId, dataType], () => { selectedLayers.value = availableLayers.value.map(l => l.key); }, { immediate: true, flush: 'sync' });
 function loadDraft() { const c = config.value; draftBoundaries.value = c ? [...c.boundaries] : []; draftThreshold.value = c?.threshold ?? 0; }
 watch(dataType, loadDraft, { immediate: true });
-function applyConfig() {
+async function applyConfig() {
   const next = { boundaries: [...draftBoundaries.value], threshold: draftThreshold.value };
   if (!validateConfig(next)) return ElMessage.error('请输入 1～20 个递增、不重复的分界值及有效门限');
-  try { saveAnalysisConfig(dataType.value, next); ElMessage.success('分析配置已应用并保存'); }
+  try { await saveAnalysisConfig(dataType.value, next); ElMessage.success('分析配置已应用并保存'); }
   catch (e) { ElMessage.warning(e.message); }
 }
-function resetConfig() {
-  try { saveAnalysisConfig(dataType.value, analysisDefaults[dataType.value]); }
+async function resetConfig() {
+  try { await saveAnalysisConfig(dataType.value, analysisDefaults[dataType.value]); }
   catch (e) { ElMessage.warning(e.message); }
   loadDraft();
 }

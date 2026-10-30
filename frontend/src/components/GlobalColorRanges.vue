@@ -1,7 +1,7 @@
 <template>
   <el-button @click="visible = true">全局色标配置</el-button>
   <el-dialog v-model="visible" title="全局色标配置" width="700px" @open="loadDraft">
-    <p class="muted">按指标统一画图展示与结果对比页的预览色标,覆盖所有数据源、任务和楼层。配置保存在当前浏览器,刷新后保留。</p>
+    <p class="muted">按指标统一画图展示与结果对比页的预览色标,覆盖所有数据源、任务和楼层。配置保存在当前应用用户目录，重启后保留。</p>
     <div v-for="type in colorTypes" :key="type.key" class="preset-row">
       <strong>{{ type.key }} <small>{{ type.unit }}</small></strong>
       <el-input-number v-model="draft[type.key][0]" :precision="2" aria-label="色标下限" />
@@ -27,20 +27,20 @@ import { colorTypes, colorRanges, saveColorRange, enableColorRange } from '../co
 const visible = ref(false);
 const draft = reactive(Object.fromEntries(colorTypes.map((type) => [type.key, [...type.range]])));
 function loadDraft() { for (const type of colorTypes) draft[type.key] = [...(colorRanges[type.key]?.range || type.range)]; }
-function apply(type) {
-  try { saveColorRange(type, draft[type]); ElMessage.success(`已保存并应用 ${type} 全局范围`); }
+async function apply(type) {
+  try { await saveColorRange(type, draft[type]); ElMessage.success(`已保存并应用 ${type} 全局范围`); }
   catch (e) { ElMessage.error(e.message); }
 }
-function toggle(type, enabled) {
-  try { enableColorRange(type, enabled); } catch (e) { ElMessage.error(e.message); }
+async function toggle(type, enabled) {
+  try { await enableColorRange(type, enabled); } catch (e) { ElMessage.error(e.message); }
 }
-function applySaved() {
+async function applySaved() {
   const saved = colorTypes.filter((type) => colorRanges[type.key]);
   if (!saved.length) return ElMessage.info('请先保存至少一个指标范围');
-  try { for (const type of saved) enableColorRange(type.key, true); ElMessage.success('已装配所有已保存范围'); }
+  try { for (const type of saved) await enableColorRange(type.key, true); ElMessage.success('已装配所有已保存范围'); }
   catch (e) { ElMessage.error(e.message); }
 }
-function disableAll() { for (const type of colorTypes) toggle(type.key, false); }
+async function disableAll() { for (const type of colorTypes) await toggle(type.key, false); }
 </script>
 
 <style scoped>

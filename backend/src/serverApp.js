@@ -11,10 +11,13 @@ const { createExporter } = require('./exporter');
 const { createAnalysisService } = require('./analysisService');
 const { createOpenResultsFolder } = require('./openResultsFolder');
 const { createRoutes } = require('./routes');
+const { createSettingsStore } = require('./settingsStore');
+const { createDesktopRoutes } = require('./desktopRoutes');
 
 function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, devOrigin } = {}) {
   if (!paths || !path.isAbsolute(paths.dataDir)) throw new Error('必须显式提供运行目录');
   if (sessionSecret && (!/^[A-Za-z0-9_]+$/.test(sessionCookieName || '') || sessionSecret.length < 32)) throw new Error('会话配置无效');
+  settingsStore ||= createSettingsStore({ paths });
   const runtime = createConfig({ paths, settingsStore });
   const sourcesStore = createSourcesStore(runtime.SOURCES_FILE);
   const cache = createCache({ ...runtime, sourcesStore });
@@ -49,6 +52,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   });
   app.use('/api/preview/save', express.json({ limit: '21mb' }));
   app.use(express.json({ limit: '2mb' }));
+  app.use('/api', createDesktopRoutes({ settingsStore }));
   app.use('/api', createRoutes({ ...runtime, sourcesStore, jobQueue: jobs, cache, exporter, ...analysis, ...folders }));
   app.use(express.static(paths.frontendDir));
   app.get('*', (req, res) => {
@@ -59,7 +63,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   });
   app.use((error, req, res, next) => { res.status(error.status || 500).json({ error: error.message }); });
   return {
-    app, jobs, paths,
+    app, jobs, paths, settingsStore, sourcesStore,
     listen({ host = '127.0.0.1', port = 0 } = {}) {
       if (host !== '127.0.0.1') return Promise.reject(new Error('仅允许绑定本机回环地址'));
       if (server) return Promise.reject(new Error('服务已经启动'));

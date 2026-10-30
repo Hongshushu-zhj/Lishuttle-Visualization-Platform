@@ -10,14 +10,17 @@
 | A | canvas blob PNG 原生下载 | PASS | Electron 生命周期用例，校验保存文件签名 |
 | A | unpacked 真实 worker、MATLAB、PNG、ZIP 保存 | PASS | .desktop-test-data/packaged-smoke.json，DESKTOP_SMOKE_OK |
 | A | 本机 NSIS 安装及安装目录复测（系统 PATH 无 Node） | PASS | 安装 exit 0，installed-smoke.json，DESKTOP_SMOKE_OK |
-| A | 独立普通用户、无 Node/源码 Windows 环境安装 | 未执行 | 用户另有设备，待转移 alpha.2 测试包并带回报告 |
+| A | 独立 Windows 环境安装与五项自动检查 | PASS | 用户带回 alpha.2 / R2024b 报告，cleanEnvironmentConfirmed=true；无 Node/源码由测试者确认 |
+| A | 独立设备最新样图人工复核 | PASS | 离线轮三张 PNG 已打开，本轮 SCR 标题无工具栏遮挡；首次异常保留在下方历史问题中 |
+| A | 独立设备断网运行、关闭后重启 | PASS | 用户明确确认操作，新一轮报告五项 PASS，见 offline-acceptance-review-2026-10-30.md；JSON 不自动检测这两项 |
+| A | 外机下载 ZIP 内容人工复核 | 未执行 | 自动保存检查 PASS，但两次带回目录均无 downloads，未独立解压检查 |
 | A | 无 Node/源码的图形化验收工具 | PASS（本机源码和安装后入口） | alpha.2 安装 exit 0，真实菜单/三图/PNG/ZIP/版本报告，系统 PATH，无常规源修改 |
 | B | 渠道隔离、设置、迁移、环境检测、首次引导 | 未执行 | 按 A 关口后推进 |
 | C | 取消/超时、部分失败、重启恢复、输出策略 | 未执行 | 按计划推进 |
 | C | 室内外、多任务、对比、调色、分析、三种导出 | 未执行 | 自动及人工回归 |
 | D | 安装、升级、卸载、共存、离线、错误恢复 | 未执行 | 最终安装包验收 |
 
-阶段 A 未通过前不推进设置页等后续任务，不将候选产物标为正式版本。
+阶段 A 技术关口已通过，可以按计划进入阶段 B。此结论不等于阶段 B～D 完成，不将候选产物标为正式版本。
 
 ## 阶段 A 实际结果与边界
 
@@ -39,4 +42,14 @@ dev 候选加入“安装验收 → 运行阶段 A 安装验收…”菜单。�
 
 alpha.2 最终安装候选来自干净代码提交 `70557f3b4f91e2c30046fbda8afaa04be17cb1b6`，NSIS 安装退出 0，安装目录原生菜单验收在系统 PATH 下全项 PASS，真实 MATLAB 为 9.12.0.1884302 (R2022a)。报告/三张图/PNG/ZIP 保存证据位于 `.desktop-test-data/native-acceptance-packaged/`，仍标 `cleanEnvironmentConfirmed=false`，人工检查仍为 NOT_RUN。
 
-转移包为 `release/AntennaDraw-StageA-1.0.0-alpha.2.zip`，仅含安装程序、另一台设备验收说明和 SHA256SUMS.txt。已逐项核对 ZIP 清单及其中安装程序 SHA-256，与原产物一致：`d68c1da30b437297948c0d78b30f6269c2d06982535077d833f8af9bbc92599e`。独立设备通过与否仍等待用户运行并带回结果。
+转移包为 `release/AntennaDraw-StageA-1.0.0-alpha.2.zip`，仅含安装程序、另一台设备验收说明和 SHA256SUMS.txt。已逐项核对 ZIP 清单及其中安装程序 SHA-256，与原产物一致：`d68c1da30b437297948c0d78b30f6269c2d06982535077d833f8af9bbc92599e`。
+
+## 独立设备结果复核（2026-10-30）
+
+用户已带回报告与三张 PNG。外机五项自动检查通过，MATLAB 实测版本增加 R2024b；该证据仅覆盖阶段 A 的合成样本。人工复核 sample-2.png 发现 MATLAB 坐标轴工具栏遮挡标题，断网和重启未有执行证据。原始报告不修改；单独记录复核结果及 SHA-256 于 external-acceptance-review-2026-10-30.md。当前发布判定为 HOLD，安装包保持 `1.0.0-alpha.2` / dev，不能标记正式 `1.0.0`。
+
+## 离线及重启补充复核（2026-10-30）
+
+用户随后提供离线测试目录，并明确确认已完整关闭应用、从桌面快捷方式重新打开后再次验收。新报告北京时间 23:13:28～23:13:39，五项全部 PASS，MATLAB 仍为 R2024b；三张 PNG 已打开，尺寸及压缩流有效，本轮未见标题遮挡。离线运行和重新启动据此记为 PASS，阶段 A 技术关口完成；详细证据与文件指纹见 offline-acceptance-review-2026-10-30.md。
+
+原始 JSON 的 manualChecks 仍为 NOT_RUN，因为当前程序不自动记录网络断开或用户重启；保留原件，在复核文档记录用户确认。首次 SCR 图片的工具栏遮挡在相同构建的新一轮中未复现，没有代码修复，作为后续图像回归问题保留。最终稳定版仍须完成 Task 3～10 及完整回归，外机 ZIP 内容也应在最终验收中检查；安装包版本和渠道不变。

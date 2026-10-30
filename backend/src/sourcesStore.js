@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { scanSource } = require('./scanner');
+const { createJsonStore } = require('./jsonStore');
 
 function hashPath(p) {
   return crypto.createHash('md5').update(path.resolve(p).toLowerCase()).digest('hex').slice(0, 12);
@@ -12,16 +13,23 @@ function hashPath(p) {
 class SourcesStore {
   constructor(file) {
     this.file = file;
+    this.persistence = createJsonStore({ file, defaults: [], validate: value => {
+      if (!Array.isArray(value) || value.some(s => !s || typeof s.id !== 'string' || typeof s.path !== 'string' || !path.isAbsolute(s.path))) {
+        throw Object.assign(new Error('数据源清单格式无效'), { code: 'INVALID_CONFIG' });
+      }
+      return value;
+    } });
     this.sources = [];
     this.load();
   }
 
   load() {
     try {
-      const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      const data = this.persistence.get();
       this.sources = Array.isArray(data) ? data : [];
       for (const source of this.sources) {
         const scan = scanSource(source.path);
+        source.offline = !scan.ok;
         if (scan.ok) source.scan = scan;
         else if (source.scan && !source.scan.tasks) {
           const name = path.basename(source.scan.predDir || '0');
@@ -34,7 +42,14 @@ class SourcesStore {
   }
 
   save() {
-    fs.writeFileSync(this.file, JSON.stringify(this.sources, null, 2));
+    try { this.persistence.set(this.sources); }
+    catch (error) { this.sources = this.persistence.get(); throw error; }
+  }
+
+  replace(records) {
+    const saved = this.persistence.set(records);
+    this.sources = saved;
+    return this.list();
   }
 
   list() {

@@ -10,7 +10,9 @@ function createConfig({ paths, settingsStore, legacy = false }) {
     try { config = { ...config, ...JSON.parse(fs.readFileSync(file, 'utf8')) }; configSource = file; }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  if (settingsStore) config = { ...config, ...settingsStore.get(), maxConcurrentJobs: 1 };
+  if (settingsStore) {
+    for (const key of Object.keys(settingsStore.get())) Object.defineProperty(config, key, { enumerable: true, get: () => settingsStore.get()[key] });
+  }
   const DATA_DIR = paths.dataDir;
   const result = { config, configSource, DATA_DIR, CACHE_DIR: paths.cacheDir, JOBS_DIR: paths.jobsDir,
     EXPORT_DIR: paths.exportDir, SOURCES_FILE: path.join(DATA_DIR, 'sources.json'),
@@ -19,9 +21,9 @@ function createConfig({ paths, settingsStore, legacy = false }) {
   return result;
 }
 function legacyConfig() {
-  const root = path.resolve(__dirname, '..');
-  const dataDir = path.join(root, 'data');
-  return createConfig({ legacy: true, paths: { dataDir, cacheDir: path.join(dataDir, 'cache'), jobsDir: path.join(dataDir, 'jobs'),
-    exportDir: path.join(dataDir, 'exports'), matlabDir: path.resolve(root, '../matlab'), frontendDir: path.resolve(root, '../frontend/dist') } });
+  const { resolveRuntimePaths } = require('./runtimePaths');
+  const { createSettingsStore } = require('./settingsStore');
+  const paths = resolveRuntimePaths({ channel: 'dev', sourceRoot: path.resolve(__dirname, '../..'), dataDir: process.env.ANTENNA_DESKTOP_DATA_DIR });
+  return createConfig({ paths, settingsStore: createSettingsStore({ paths }) });
 }
 module.exports = lazyService(legacyConfig, { createConfig });

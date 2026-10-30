@@ -7,12 +7,14 @@ const { registerDownloads } = require('./downloads.cjs');
 
 const channel = require('../package.json').desktopChannel || 'dev';
 const dev = channel === 'dev';
+const resources = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
+const { resolveRuntimePaths } = require(path.join(resources, 'backend/src/runtimePaths'));
 app.setName(dev ? 'AntennaDraw Dev' : 'AntennaDraw');
 app.setAppUserModelId(dev ? 'com.antennadraw.desktop.dev' : 'com.antennadraw.desktop');
-const dataDir = dev && process.env.ANTENNA_DESKTOP_DATA_DIR
-  ? path.resolve(process.env.ANTENNA_DESKTOP_DATA_DIR)
-  : path.join(process.env.LOCALAPPDATA || app.getPath('appData'), dev ? 'AntennaDraw-Dev' : 'AntennaDraw');
-fs.mkdirSync(dataDir, { recursive: true });
+const paths = resolveRuntimePaths({ channel, ...(app.isPackaged ? { resourcesDir: resources } : { sourceRoot: resources }),
+  dataDir: dev ? process.env.ANTENNA_DESKTOP_DATA_DIR : undefined });
+const { dataDir } = paths;
+for (const dir of [dataDir, path.join(dataDir, 'electron'), path.join(dataDir, 'session')]) fs.mkdirSync(dir, { recursive: true });
 app.setPath('userData', path.join(dataDir, 'electron'));
 app.setPath('sessionData', path.join(dataDir, 'session'));
 const primary = app.requestSingleInstanceLock();
@@ -46,10 +48,6 @@ function makeWindow(appSession) {
   return w;
 }
 async function start() {
-  const resources = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
-  const paths = { channel, dataDir, matlabDir: path.join(resources, 'matlab'),
-    frontendDir: path.join(resources, app.isPackaged ? 'frontend' : 'frontend/dist'),
-    jobsDir: path.join(dataDir, 'jobs'), exportDir: path.join(dataDir, 'exports'), cacheDir: path.join(dataDir, 'cache') };
   const secret = crypto.randomBytes(32).toString('hex');
   const cookieName = 'antenna_' + crypto.randomBytes(8).toString('hex');
   backend = await startBackend({ entry: path.join(resources, 'backend/desktop-entry.js'), channel, paths,

@@ -17,6 +17,10 @@ async function req(path, options = {}) {
 }
 
 export const health = () => req('/health');
+export const getSettings = () => req('/settings');
+export const patchSettings = patch => req('/settings', { method: 'PATCH', body: JSON.stringify(patch) });
+export const getPreferences = () => req('/preferences');
+export const patchPreferences = patch => req('/preferences', { method: 'PATCH', body: JSON.stringify(patch) });
 
 export const listSources = () => req('/sources');
 export const addSource = (path) => req('/sources', { method: 'POST', body: JSON.stringify({ path }) });
