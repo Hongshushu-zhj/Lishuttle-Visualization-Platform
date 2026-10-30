@@ -420,7 +420,8 @@ router.get('/export/:zipId/download', (req, res) => {
   if (!/^[0-9a-f-]{36}$/.test(req.params.zipId)) return res.status(400).json({ error: '导出标识无效' });
   const zipFile = path.join(EXPORT_DIR, `${req.params.zipId}.zip`);
   if (!fs.existsSync(zipFile)) return res.status(404).json({ error: '导出文件不存在' });
-  res.download(zipFile, `figures_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`);
+  const release = exporter.retain(zipFile); res.once('close',release);
+  res.download(zipFile, `figures_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`, error => { release(); if (error && !res.headersSent) res.status(500).json({ error:'导出文件读取失败' }); });
 });
 
 return router;

@@ -16,7 +16,7 @@ const { createDesktopRoutes } = require('./desktopRoutes');
 const { createProcessSupervisor } = require('./processSupervisor');
 const { createMatlabEnvironment } = require('./matlabEnvironment');
 
-function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, devOrigin } = {}) {
+function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, devOrigin, logger = () => {} } = {}) {
   if (!paths || !path.isAbsolute(paths.dataDir)) throw new Error('必须显式提供运行目录');
   if (sessionSecret && (!/^[A-Za-z0-9_]+$/.test(sessionCookieName || '') || sessionSecret.length < 32)) throw new Error('会话配置无效');
   settingsStore ||= createSettingsStore({ paths });
@@ -33,6 +33,11 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   const app = express(); app.disable('x-powered-by');
   let server, origin, closing, closingRequested = false;
   app.use((req, res, next) => {
+    const json = res.json.bind(res);
+    res.json = value => {
+      if (value?.error && !value.details) value = { ...value, details: { code:value.code || (res.statusCode === 403 ? 'API_FORBIDDEN' : `HTTP_${res.statusCode}`), message:value.error, retryable:res.statusCode >= 500 } };
+      return json(value);
+    };
     if (req.headers.host !== (origin && new URL(origin).host)) return res.status(403).json({ error: '本机地址校验失败' });
     const requestOrigin = req.headers.origin;
     if (requestOrigin && requestOrigin !== origin && requestOrigin !== devOrigin) return res.status(403).json({ error: '来源校验失败' });
@@ -51,12 +56,16 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
       if (!['GET', 'HEAD'].includes(req.method) && requestOrigin !== origin) return res.status(403).json({ error: '修改请求缺少可信来源' });
     }
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'");
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     if (closingRequested && !['GET', 'HEAD'].includes(req.method)) return res.status(503).json({ error: '应用正在退出，请等待清理完成', code: 'APP_CLOSING' });
     next();
   });
   app.use('/api/preview/save', express.json({ limit: '21mb' }));
   app.use(express.json({ limit: '2mb' }));
+  const cleanup = () => jobs.hasActive() ? { removed:0, skippedActive:true } : require('./diagnostics').cleanupManaged({ paths, activeFiles:exporter.activeFiles });
+  app.post('/api/maintenance/cleanup', (req,res,next) => { try { res.json(cleanup()); } catch(error) { next(error); } });
   app.use('/api', createDesktopRoutes({ settingsStore, environment, paths, sourcesStore, jobs }));
   app.use('/api', createRoutes({ ...runtime, sourcesStore, jobQueue: jobs, cache, exporter, ...analysis, ...folders }));
   app.use(express.static(paths.frontendDir));
@@ -66,7 +75,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
     if (!fs.existsSync(index)) return res.status(503).send('应用资源缺失，请重新安装或构建前端。');
     res.sendFile(index);
   });
-  app.use((error, req, res, next) => { res.status(error.status || 500).json({ error: error.message }); });
+  app.use((error, req, res, next) => { logger('API_ERROR', { code:error.code || 'REQUEST_FAILED', message:error.message }); res.status(error.status || 500).json({ error:error.message, code:error.code || 'REQUEST_FAILED' }); });
   return {
     app, jobs, paths, settingsStore, sourcesStore, environment, supervisor,
     getActivity: () => ({ active: jobs.hasActive() || environment.isActive() || supervisor.isBusy(), jobs: jobs.list().filter(job => ['queued', 'running', 'cancelling'].includes(job.status)).length,
@@ -75,11 +84,10 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
       if (host !== '127.0.0.1') return Promise.reject(new Error('仅允许绑定本机回环地址'));
       if (server) return Promise.reject(new Error('服务已经启动'));
       await supervisor.initialize();
+      try { cleanup(); } catch (error) { logger('CLEANUP_FAILED', { message:error.message }); }
       if (!supervisor.getBlockedReason()) require('./outputPaths').recoverOutputLeases({ jobs: jobs.list(), dataDir: paths.dataDir, jobsDir: paths.jobsDir });
-      return new Promise((resolve, reject) => {
-        server = app.listen(port, host, () => { origin = `http://${host}:${server.address().port}`; resolve({ origin }); });
-        server.once('error', reject);
-      });
+      server = await require('./loopbackServer').listenLoopback(app, { host,port });
+      origin = `http://${host}:${server.address().port}`; return { origin };
     },
     close() {
       if (closing) return closing;

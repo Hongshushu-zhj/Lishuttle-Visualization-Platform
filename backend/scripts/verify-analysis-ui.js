@@ -6,14 +6,15 @@ const path = require('path');
 const assert = require('node:assert/strict');
 const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
-const store = require('../src/sourcesStore');
+const { createServer } = require('../src/serverApp');
+const { resolveRuntimePaths } = require('../src/runtimePaths');
 const { scanSource } = require('../src/scanner');
 
 async function main() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'analysis-ui-'));
-  const oldSources = store.sources, oldSave = store.save;
-  let server, browser;
-  store.sources = []; store.save = () => {};
+  const paths = resolveRuntimePaths({ channel:'dev', dataDir:path.join(root,'state'),sourceRoot:path.resolve(__dirname,'../..') });
+  const server = createServer({paths}); const store=server.sourcesStore;
+  let browser;
   try {
     for (const name of ['任务A', '任务B']) {
       const pred = path.join(root, 'pred', name); fs.mkdirSync(pred, { recursive: true });
@@ -26,13 +27,11 @@ async function main() {
       ]) { const raw = Buffer.alloc(24); values.forEach((v, i) => raw.writeInt16LE(v, 2 * i)); fs.writeFileSync(path.join(pred, file), raw); }
     }
     store.add(root, scanSource(root));
-    const app = express(); app.use(express.json()); app.use('/api', require('../src/routes'));
-    app.use(express.static(path.join(__dirname, '../../frontend/dist')));
-    server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    const {origin} = await server.listen(); await fetch(origin+'/api/onboarding/complete',{method:'POST'});
     browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}) });
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await page.goto(origin);
     await page.getByText('结果分析', { exact: true }).click();
     await page.getByRole('button', { name: '开始分析', exact: true }).waitFor();
     await page.getByRole('button', { name: '开始分析', exact: true }).click();
@@ -66,7 +65,7 @@ async function main() {
     assert.equal(await page.getByRole('option', { name: /BESTSERVER/ }).count(), 0, 'BESTSERVER 不应出现在结果分析指标选项中');
     await page.keyboard.press('Escape');
     await page.getByText('BESTSERVER 为小区编号数据，暂不纳入结果分析。', { exact: true }).waitFor();
-    const sourcesResponse = await page.request.get(`http://127.0.0.1:${server.address().port}/api/sources`);
+    const sourcesResponse = await page.request.get(origin+'/api/sources');
     const exposedSources = await sourcesResponse.json();
     assert.ok(exposedSources[0].tasks[0].types.BESTSERVER, '原始数据源及绘图类型必须保留 BESTSERVER');
     await page.locator('.conditions label').nth(1).locator('.el-select').click();
@@ -104,8 +103,7 @@ async function main() {
     console.log('ANALYSIS_UI_OK: 默认选择、多层统计、配置应用/刷新恢复、CSV/PNG、BESTSERVER 分析入口隐藏且绘图类型保留、任务切换、旧响应隔离、无浏览器异常');
   } finally {
     await browser?.close();
-    if (server) await new Promise(resolve => server.close(resolve));
-    store.sources = oldSources; store.save = oldSave;
+    await server.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 }

@@ -25,7 +25,7 @@ async function main() {
     write('BESTSERVER_1.dem', [0, 1, 1, 12, 12, -32768]);
     const source = store.add(root, scanSource(root));
     const app = express(); app.use(express.json()); app.use('/api', require('../src/routes'));
-    server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    server = await require('../src/loopbackServer').listenLoopback(app);
     const post = async body => {
       const res = await fetch(`http://127.0.0.1:${server.address().port}/api/analysis`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

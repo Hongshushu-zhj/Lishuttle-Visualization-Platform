@@ -31,7 +31,7 @@ async function main() {
     assert.deepEqual(scan.types.RSRP.layers[1].bounds, { left: 10, right: 13, bottom: 20, top: 22, res: 1 });
     const source = sources.add(fixture, scan);
     const app = express(); app.use(express.json()); app.use('/api', router);
-    server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    server = await require('../src/loopbackServer').listenLoopback(app);
     async function figures() {
       const response = await fetch(`http://127.0.0.1:${server.address().port}/api/plot`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

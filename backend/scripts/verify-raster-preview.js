@@ -28,7 +28,7 @@ async function main() {
     assert.deepEqual(wallSegments(wall), [[0, 0, 2, 2]]);
     const source = store.add(root, scanSource(root));
     const app = express(); app.use(express.json({ limit: '21mb' })); app.use('/api', require('../src/routes'));
-    server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    server = await require('../src/loopbackServer').listenLoopback(app);
     const base = `http://127.0.0.1:${server.address().port}`;
     const post = async (route, body) => {
       const response = await fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

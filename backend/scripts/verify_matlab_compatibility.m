@@ -48,6 +48,7 @@ showrsrp_indoor(rsrp, bounds, wall); assert(isequal(caxis, [-110 -40])); close a
 % 隔离五个旧脚本,实际覆盖备用调用路径与调度导出。
 isolated = fullfile(fixture, 'isolated'); mkdir(isolated);
 copyfile(fullfile(scriptDir, 'plot_dispatch.m'), isolated);
+copyfile(fullfile(scriptDir, 'prepare_export_figure.m'), isolated);
 copyfile(fullfile(scriptDir, 'showrsrp_outdoor.m'), isolated);
 rmpath(scriptDir); addpath(isolated); clear plot_dispatch;
 fig = struct('preddir',pred,'dataType','SCR','layer','10m', ...

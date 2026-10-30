@@ -49,6 +49,7 @@ test('both output policies preserve history; native PNG/ZIP/CSV/Canvas saving, c
     fs.writeFileSync(path.join(data, 'blocked'), 'not a directory'); await save(csv, 'blocked/fail.csv', 'fail');
     await expect(page.getByText('文件保存失败，请检查目标目录和磁盘空间后重试。', { exact: true })).toBeVisible();
     await api('/onboarding/complete'); await page.reload(); await page.getByRole('button', { name: '任务记录', exact: true }).click();
+    await page.waitForFunction(() => { const drawer=document.querySelector('.el-drawer');return drawer&&Math.abs(drawer.getBoundingClientRect().right-window.innerWidth)<2; });
     await page.screenshot({ path: path.join(root, '.desktop-test-data/screenshots/output-history.png') });
   } finally { if (app) await app.close(); fs.rmSync(data, { recursive: true, force: true }); }
 });

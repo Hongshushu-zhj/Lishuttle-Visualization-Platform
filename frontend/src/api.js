@@ -12,11 +12,12 @@ async function req(path, options = {}) {
   } catch (e) {
     throw new Error(`服务返回异常(${res.status}),请确认后端已启动`);
   }
-  if (!res.ok) throw new Error(data.error || `请求失败(${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `请求失败(${res.status})`), { code:data.details?.code, details:data.details });
   return data;
 }
 
 export const health = () => req('/health');
+export const cleanupTemporary = () => req('/maintenance/cleanup', { method:'POST' });
 export const getSettings = () => req('/settings');
 export const patchSettings = patch => req('/settings', { method: 'PATCH', body: JSON.stringify(patch) });
 export const getPreferences = () => req('/preferences');

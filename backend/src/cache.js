@@ -25,7 +25,7 @@ function safeSegment(value) {
 
 // 渲染逻辑版本:绘图脚本或默认渲染参数变更时递增,
 // 已缓存的 PNG 会自动判定为过期并重新绘制(无需手动清缓存)。
-const RENDER_VERSION = 3;
+const RENDER_VERSION = 4;
 
 // 变体名追加在文件名里:ground.png / ground@u1a2b3c4d.png / ground@rel-ll.png
 // 变体用于区分"同一张图的不同渲染口径"(统一坐标范围、相对坐标显示等)。

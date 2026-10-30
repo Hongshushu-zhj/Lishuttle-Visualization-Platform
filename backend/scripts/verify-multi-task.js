@@ -49,7 +49,7 @@ async function main() {
     assert.deepEqual(scan.tasks['室外任务'].types.RSRP.layers.map((l) => l.key), ['ground', '10m']);
     const source = sources.add(root, scan);
     const app = express(); app.use(express.json()); app.use('/api', require('../src/routes'));
-    server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    server = await require('../src/loopbackServer').listenLoopback(app);
     const base = `http://127.0.0.1:${server.address().port}`;
     const post = async (url, body) => {
       const r = await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

@@ -1,10 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
-function registerDesktopIpc({ ipcMain, dialog, shell, getWindow, getOrigin, paths, getAppInfo }) {
+const { isTrustedFrame } = require('./security.cjs');
+function registerDesktopIpc({ ipcMain, dialog, shell, getWindow, getOrigin, paths, getAppInfo, diagnostics, getDiagnosticInfo = getAppInfo }) {
   const handle = (name, fn) => ipcMain.handle('desktop:' + name, async event => {
     const window = getWindow();
-    if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('未授权桌面调用');
-    try { if (new URL(event.senderFrame.url).origin !== getOrigin()) throw new Error(); } catch { throw new Error('未授权桌面调用'); }
+    if (!isTrustedFrame(event, window, getOrigin())) throw new Error('未授权桌面调用');
     return fn(window);
   });
   const select = async (window, options) => {
@@ -12,6 +12,15 @@ function registerDesktopIpc({ ipcMain, dialog, shell, getWindow, getOrigin, path
     return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
   };
   handle('app-info', getAppInfo);
+  if (diagnostics) {
+    handle('preview-diagnostics', async () => diagnostics.preview(await getDiagnosticInfo()));
+    handle('export-diagnostics', async window => {
+      const result = await dialog.showSaveDialog(window, { title:'保存诊断（可能包含本地路径，请先检查预览）', defaultPath:'AntennaDraw-diagnostics.json', filters:[{name:'诊断 JSON',extensions:['json']}] });
+      if (result.canceled || !result.filePath) return null;
+      diagnostics.save(result.filePath, await getDiagnosticInfo());
+      return { ok:true, path:result.filePath };
+    });
+  }
   handle('select-matlab', async window => {
     const selected = await select(window, { title: '选择 MATLAB 安装目录中的 bin/matlab.exe', properties: ['openFile'], filters: [{ name: 'MATLAB 程序', extensions: ['exe'] }] });
     if (selected && (path.basename(selected).toLowerCase() !== 'matlab.exe' || !fs.statSync(selected).isFile())) throw new Error('请选择实际存在的 matlab.exe');

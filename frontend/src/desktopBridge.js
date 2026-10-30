@@ -7,4 +7,6 @@ export const desktopBridge = Object.freeze({
   selectPreferences: () => native?.selectPreferences() || Promise.resolve(null),
   openLogs: () => native?.openLogs() || Promise.reject(new Error('请在桌面应用中打开日志目录')),
   onDownloadResult: callback => native?.onDownloadResult(callback) || (() => {}),
+  previewDiagnostics: () => native?.previewDiagnostics() || Promise.reject(new Error('请在桌面应用中预览诊断')),
+  exportDiagnostics: () => native?.exportDiagnostics() || Promise.reject(new Error('请在桌面应用中导出诊断')),
 });

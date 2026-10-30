@@ -15,6 +15,7 @@ port.on('message', async event => {
       lifetime.on('close', () => process.exit(1)); lifetime.start();
       if (message.failForTest) throw new Error('测试启动失败');
       service = createServer({ paths: message.paths, sessionSecret: message.sessionSecret,
+        logger: (event, details) => port.postMessage({ type:'log', event, details }),
         sessionCookieName: message.sessionCookieName,
         settingsStore: createSettingsStore({ paths: message.paths, initialSettings: message.settings || {} }) });
       const { origin } = await service.listen({ host: '127.0.0.1', port: 0 });

@@ -22,7 +22,7 @@ async function main() {
     const s1 = store.add(a.sourceDir, scanSource(a.sourceDir));
     const s2 = store.add(b.sourceDir, scanSource(b.sourceDir));
     const app = express(); app.use(express.json()); app.use('/api', require('../src/routes'));
-    server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    server = await require('../src/loopbackServer').listenLoopback(app);
     const base = `http://127.0.0.1:${server.address().port}`;
     async function plot(mode, requests) {
       const res = await fetch(base + '/api/plot', { method: 'POST', headers: { 'Content-Type': 'application/json' },

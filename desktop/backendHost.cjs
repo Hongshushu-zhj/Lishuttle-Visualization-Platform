@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { utilityProcess, MessageChannelMain } = require('electron');
 
-function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName, settings, matlabPrefDir, failForTest = false }) {
+function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName, settings, matlabPrefDir, failForTest = false, logger = () => {} }) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'MATLABPATH']) delete env[key];
@@ -15,6 +15,7 @@ function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName,
     const fail = error => { clearTimeout(timer); if (!ready) { child.kill(); reject(error); } };
     child.once('spawn', () => child.postMessage({ type: 'bootstrap', channel, paths, sessionSecret, sessionCookieName, settings, failForTest }, [lifetime.port2]));
     child.on('message', message => {
+      if (message.type === 'log') { logger(message.event, message.details); return; }
       if (message.type === 'activity' && pending.has(message.requestId)) { pending.get(message.requestId)(message); pending.delete(message.requestId); return; }
       if (message.type === 'shutdown-error') { failStopping?.(new Error(message.error.message)); return; }
       if (message.type === 'fatal') fail(Object.assign(new Error(message.error.message), { code: message.error.code }));
@@ -49,7 +50,7 @@ function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName,
     child.on('error', fail);
     // 凭证只经 postMessage 发送，不写入输出。
     child.stdout?.resume();
-    child.stderr?.on('data', chunk => process.stderr.write(chunk));
+    child.stderr?.on('data', chunk => { logger('BACKEND_STDERR', chunk.toString('utf8')); process.stderr.write(chunk); });
   });
 }
 module.exports = { startBackend };

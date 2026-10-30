@@ -46,6 +46,8 @@
         <el-button :disabled="!legacyDirectory" :loading="importing" @click="importOld">导入旧项目</el-button>
         <el-divider />
         <el-button :disabled="!isDesktop" @click="perform(desktopBridge.openLogs)">打开日志目录</el-button>
+        <el-button :disabled="!isDesktop" @click="previewDiagnostics">预览并导出诊断</el-button>
+        <el-button @click="cleanupTemporary">清理 7 天前的临时文件</el-button>
         <p class="muted">失败时保留错误说明和任务记录。色标和分析偏好可在原功能入口修改。</p>
       </el-tab-pane>
       <el-tab-pane label="关于">
@@ -61,6 +63,11 @@
       <el-button type="primary" :loading="ui.saving" :disabled="ui.checking" @click="save">保存设置</el-button>
     </template>
   </el-dialog>
+  <el-dialog v-model="diagnosticsVisible" title="诊断预览" width="800px">
+    <el-alert title="诊断可能包含本地路径，请检查后再保存或分享。不会收集输入 DEM、配置、许可或凭证。" type="warning" :closable="false" />
+    <pre style="max-height: 50vh; overflow: auto; white-space: pre-wrap; word-break: break-all">{{ diagnosticsText }}</pre>
+    <template #footer><el-button @click="diagnosticsVisible = false">关闭</el-button><el-button type="primary" @click="exportDiagnostics">保存诊断…</el-button></template>
+  </el-dialog>
 </template>
 <script setup>
 import { computed, ref } from 'vue';
@@ -73,6 +80,10 @@ import { loadSources } from '../store';
 import { initializePreferences } from '../preferences';
 const ui = desktop.state;
 const legacyDirectory = ref(''), preferencesFile = ref(''), importing = ref(false);
+const diagnosticsVisible = ref(false), diagnosticsText = ref('');
+async function previewDiagnostics() { const result=await perform(desktopBridge.previewDiagnostics); if(result){diagnosticsText.value=JSON.stringify(result,null,2);diagnosticsVisible.value=true;} }
+async function exportDiagnostics() { const result=await perform(desktopBridge.exportDiagnostics); if(result?.ok) ElMessage.success('诊断已保存'); }
+async function cleanupTemporary() { const result=await perform(api.cleanupTemporary); if(result) ElMessage.info(result.skippedActive ? '有绘图任务，暂不清理临时文件' : `已清理 ${result.removed} 个旧临时文件，输入和结果保持原位`); }
 const environmentDescription = computed(() => ui.environment.error?.message || (ui.environment.status === 'passed'
   ? `${ui.environment.matlabVersion} · 检测时间 ${new Date(ui.environment.finishedAt).toLocaleString()} · 室内/室外绘图及 PNG 通过`
   : ui.checking ? '正在启动 MATLAB 并生成微型测试图片，最多等待 180 秒。取消后会等待所属进程停止。' : '分析与交互预览可直接使用；MATLAB 绘图需保存路径并完成实际检测。'));
@@ -83,7 +94,7 @@ async function selectLegacy() { const value = await perform(desktopBridge.select
 async function selectPreferences() { const value = await perform(desktopBridge.selectPreferences); if (value) preferencesFile.value = value; }
 async function discover() { const value = await perform(api.discoverMatlab); if (value) { ui.candidates = value; if (!value.length) ElMessage.info('常见位置未找到 MATLAB，请手动选择或粘贴路径'); } }
 async function detect() { await perform(desktop.startCheck); }
-async function save() { try { await desktop.save(); ElMessage.success('设置已保存'); } catch { /* model preserves draft and reports error */ } }
+async function save() { try { await desktop.save(); await loadSources(); ElMessage.success('设置已保存'); } catch { /* model preserves draft and reports error */ } }
 async function importOld() {
   importing.value = true;
   try { const result = await api.importLegacy(legacyDirectory.value, preferencesFile.value || undefined); await desktop.load(); await initializePreferences(); await loadSources(); ElMessage.success(`已导入 ${result.sourceCount} 个数据源，${result.offlineCount} 个离线`); }
