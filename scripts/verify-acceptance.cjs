@@ -15,10 +15,11 @@ async function main() {
   let app;
   try {
     const reportRoot = path.join(scratch, 'reports'); fs.mkdirSync(reportRoot);
-    const env = { ...process.env, ANTENNA_DESKTOP_DATA_DIR: path.join(scratch, 'data') }; delete env.ELECTRON_RUN_AS_NODE;
+    const env = { ...process.env, LOCALAPPDATA:path.join(scratch,'localappdata'), ANTENNA_DESKTOP_DATA_DIR: path.join(scratch, 'data') }; delete env.ELECTRON_RUN_AS_NODE;
     for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') delete env[key];
     env.Path = path.join(process.env.SystemRoot, 'System32') + ';' + process.env.SystemRoot;
-    app = await electron.launch({ executablePath: artifact ? path.join(artifact, 'AntennaDraw Dev.exe') : undefined,
+    const productName=artifact?require('./package-verify.cjs').verifyPackage(artifact).pkg.productName:null;
+    app = await electron.launch({ executablePath: artifact ? path.join(artifact, productName+'.exe') : undefined,
       args: artifact ? [] : [root], env, cwd: artifact || root });
     const page = await app.firstWindow(); await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+/);
     await app.evaluate(({ Menu, dialog }, { matlab, reportRoot }) => {
@@ -37,7 +38,7 @@ async function main() {
     while (Date.now() < deadline) {
       const error = await app.evaluate(() => globalThis.__acceptanceError || null);
       assert.equal(error, null, error || '');
-      const directory = fs.readdirSync(reportRoot).find(name => name.startsWith('AntennaDraw-StageA-'));
+      const directory = fs.readdirSync(reportRoot).find(name => name.startsWith('AntennaDraw-DesktopV1-'));
       if (directory && fs.existsSync(path.join(reportRoot, directory, '验收结果.html'))) { reportDir = path.join(reportRoot, directory); break; }
       await new Promise(resolve => setTimeout(resolve, 500));
     }

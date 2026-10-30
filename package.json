@@ -1,7 +1,8 @@
 {
   "name": "antenna-draw-desktop",
   "productName": "AntennaDraw Dev",
-  "version": "1.0.0-alpha.2",
+  "version": "1.0.0-rc.2",
+  "desktopChannel": "dev",
   "description": "天线覆盖绘图平台 Windows 桌面版",
   "author": "AntennaDraw contributors",
   "private": true,
@@ -9,8 +10,9 @@
   "scripts": {
     "desktop:dev": "node scripts/desktop-build.cjs dev",
     "test:desktop": "node --test desktop/tests/*.test.cjs && playwright test",
-    "desktop:pack": "node scripts/desktop-build.cjs pack",
+    "desktop:pack": "node scripts/desktop-build.cjs pack --channel stable",
     "desktop:dist": "node scripts/desktop-build.cjs dist",
+    "desktop:dist:dev": "node scripts/desktop-build.cjs dist --channel dev",
     "verify:package": "node scripts/package-verify.cjs",
     "test:baseline": "node scripts/baseline.cjs",
     "desktop:test-bundle": "node scripts/create-test-bundle.cjs"

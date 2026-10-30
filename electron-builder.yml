@@ -1,5 +1,5 @@
-appId: com.antennadraw.desktop.dev
-productName: AntennaDraw Dev
+appId: com.antennadraw.desktop
+productName: AntennaDraw
 asar: true
 directories:
   output: release
@@ -14,6 +14,7 @@ extraResources:
       - package.json
       - package-lock.json
       - src/**
+      - '!src/native/*.cs'
   - from: backend/node_modules
     to: backend/node_modules
     filter:
@@ -28,6 +29,10 @@ extraResources:
     to: demo
   - from: .desktop-build/build-info.json
     to: build-info.json
+  - from: .desktop-build/native
+    to: backend/src/native
+  - from: .desktop-build/third-party
+    to: third-party
 win:
   target:
     - target: nsis
@@ -40,4 +45,4 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   deleteAppDataOnUninstall: false
-artifactName: AntennaDraw-Dev-Setup-${version}-${arch}.${ext}
+artifactName: AntennaDraw-Setup-${version}-${arch}.${ext}

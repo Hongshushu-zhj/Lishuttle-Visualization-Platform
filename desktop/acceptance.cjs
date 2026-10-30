@@ -1,4 +1,4 @@
-// 仅 dev 原型的阶段 A 验收工具，不修改正式设置、数据源或已有结果。
+// 两渠道的安装技术自检；不修改日常设置、数据源或已有结果。
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -32,7 +32,7 @@ async function runDesktopAcceptance({ parent, resources }) {
     detail: `开始后将运行所选 MATLAB，并用包内合成数据检查统计、三张图片和文件保存。不会读取业务 DEM。\nMATLAB：${executable}\n请等待验收结束后再关闭窗口。`,
     buttons: ['是，开始干净环境验收', '否，开始本机复测', '取消'], defaultId: 0, cancelId: 2 });
   if (confirmed.response === 2) return;
-  const reportDir = fs.mkdtempSync(path.join(destination.filePaths[0], 'AntennaDraw-StageA-'));
+  const reportDir = fs.mkdtempSync(path.join(destination.filePaths[0], 'AntennaDraw-DesktopV1-'));
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'antenna-acceptance-runtime-'));
   const dataDir = path.join(scratch, 'data');
   const prefs = path.join(scratch, 'matlab-prefs'); fs.mkdirSync(prefs);
@@ -46,7 +46,7 @@ async function runDesktopAcceptance({ parent, resources }) {
   const buildInfo = app.isPackaged ? JSON.parse(fs.readFileSync(path.join(resources, 'build-info.json'), 'utf8'))
     : { version: app.getVersion(), revision: 'development', workingTreeDirty: true };
   try {
-    testWindow = new BrowserWindow({ title: '阶段 A 安装验收', width: 1050, height: 800,
+    testWindow = new BrowserWindow({ title: '桌面版安装自检', parent, modal:true, width: 1050, height: 800,
       webPreferences: { session: testSession, nodeIntegration: false, contextIsolation: true, sandbox: true } });
     testWindow.removeMenu(); testWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     testWindow.webContents.on('will-navigate', event => event.preventDefault());

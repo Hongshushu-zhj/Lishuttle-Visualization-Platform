@@ -4,7 +4,7 @@
       <div class="app-header__left">
         <el-icon size="22" style="color: #1f6feb"><Picture /></el-icon>
         <span class="app-header__title">天线覆盖绘图平台</span>
-        <el-tag size="small" :type="desktop.state.appInfo?.channel === 'stable' ? 'success' : 'warning'">{{ desktop.state.appInfo?.channel === 'stable' ? '稳定版' : '开发版' }}</el-tag>
+        <el-tag size="small" :type="desktop.state.appInfo?.channel === 'stable' && !desktop.state.appInfo?.version?.includes('-') ? 'success' : 'warning'">{{ desktop.state.appInfo?.channel === 'stable' ? desktop.state.appInfo?.version?.includes('-') ? '稳定渠道候选版' : '稳定版' : '开发版' }}</el-tag>
       </div>
       <div class="app-header__right" style="display: flex; align-items: center; gap: 12px">
         <el-button link :type="desktop.isReady() ? 'success' : 'warning'" @click="desktop.state.open = true">{{ environmentLabel(desktop.state.environment) }}</el-button>

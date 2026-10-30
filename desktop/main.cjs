@@ -69,12 +69,15 @@ async function start() {
   configureSessionSecurity(appSession);
   await appSession.cookies.set({ url: origin, name: cookieName, value: secret, httpOnly: true, sameSite: 'strict', path: '/' });
   window = makeWindow(appSession);
-  if (dev) {
-    const menu = Menu.buildFromTemplate([{ label: '安装验收', submenu: [{ id: 'desktop-acceptance', label: '运行阶段 A 安装验收…',
+  {
+    const menu = Menu.buildFromTemplate([{ label: '安装自检', submenu: [{ id: 'desktop-acceptance', label: '运行安装自检…',
       click: async item => {
         if (acceptanceActive) return;
         acceptanceActive = true; item.enabled = false;
-        try { await require('./acceptance.cjs').runDesktopAcceptance({ parent: window, resources }); }
+        try {
+          if ((await backend.getActivity()).active) { await dialog.showMessageBox(window, { type:'info',message:'请先等待或取消当前检测/绘图，再运行安装自检。',buttons:['确定'] }); return; }
+          await require('./acceptance.cjs').runDesktopAcceptance({ parent: window, resources });
+        }
         catch (error) { await dialog.showMessageBox(window, { type: 'error', message: '验收未完成', detail: error.message, buttons: ['确定'] }); }
         finally { acceptanceActive = false; item.enabled = true; }
       },

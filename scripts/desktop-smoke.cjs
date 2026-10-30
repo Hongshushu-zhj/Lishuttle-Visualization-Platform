@@ -9,8 +9,8 @@ const { createDemo } = require('../desktop/tests/fixtures.cjs');
 const args = process.argv.slice(2);
 function option(name) { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; }
 async function main() {
-  const { root } = verifyPackage(option('--artifact') || path.resolve(__dirname, '../release/win-unpacked'));
-  const executablePath = option('--exe') || path.join(root, 'AntennaDraw Dev.exe');
+  const { root, pkg } = verifyPackage(option('--artifact') || path.resolve(__dirname, '../release/stable/win-unpacked'));
+  const executablePath = option('--exe') || path.join(root, pkg.productName+'.exe');
   const matlab = option('--matlab') || process.env.ANTENNA_DESKTOP_MATLAB;
   assert.ok(matlab && fs.existsSync(matlab), '必须用 --matlab 显式指定真实 MATLAB，不能用假进程代替阶段 A');
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'antenna-packaged-smoke-'));
@@ -20,7 +20,7 @@ async function main() {
   const record = (name, details) => { checks.push({ name, status: 'PASS', details }); console.log('PASS ' + name); };
   try {
     const prefs = path.join(scratch, 'matlab-prefs'); fs.mkdirSync(prefs);
-    const env = { ...process.env, ANTENNA_DESKTOP_DATA_DIR: path.join(scratch, 'data'), ANTENNA_DESKTOP_MATLAB: matlab, MATLAB_PREFDIR: prefs };
+    const env = { ...process.env, LOCALAPPDATA:path.join(scratch,'localappdata'), ANTENNA_DESKTOP_DATA_DIR: path.join(scratch, 'data'), ANTENNA_DESKTOP_MATLAB: matlab, MATLAB_PREFDIR: prefs };
     delete env.ELECTRON_RUN_AS_NODE;
     if (args.includes('--no-node-path')) {
       for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') delete env[key];
@@ -32,13 +32,17 @@ async function main() {
     await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+/);
     const versions = await page.evaluate(() => window.desktopBridge.getAppInfo());
     record('bundled Electron/Node', versions);
-    async function api(url, body) {
-      const result = await page.evaluate(async ({ url, body }) => {
-        const response = await fetch('/api' + url, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    async function api(url, body, method = 'POST') {
+      const result = await page.evaluate(async ({ url, body, method }) => {
+        const response = await fetch('/api' + url, body === undefined ? {} : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         return { status: response.status, data: await response.json() };
-      }, { url, body });
+      }, { url, body, method });
       assert.equal(result.status, 200, JSON.stringify(result)); return result.data;
     }
+    await api('/settings', {matlabExe:matlab}, 'PATCH');
+    const detection = await api('/environment/check',{executable:matlab}); let state;
+    do { await new Promise(resolve=>setTimeout(resolve,500));state=await api('/environment/check/'+detection.id); } while(state.status==='running');
+    assert.equal(state.status,'passed',JSON.stringify(state));record('real packaged MATLAB environment detection',{version:state.matlabVersion});
     const demo = createDemo(scratch);
     const source = await api('/sources', { path: demo.sourceDir });
     const stats = await api('/analysis', { sourceId: source.id, taskId: '室内 A', dataType: 'RSRP', layers: ['F1', 'F2'] });
@@ -67,6 +71,7 @@ async function main() {
       assert.deepEqual(bytes.slice(0, 8), [137, 80, 78, 71, 13, 10, 26, 10]);
       const size = await app.evaluate(({ nativeImage }, bytes) => nativeImage.createFromBuffer(Buffer.from(bytes)).getSize(), bytes);
       assert.ok(size.width > 100 && size.height > 100); dimensions.push(size);
+      fs.mkdirSync(path.join(evidence,'final-samples',pkg.desktopChannel),{recursive:true});fs.writeFileSync(path.join(evidence,'final-samples',pkg.desktopChannel,`sample-${dimensions.length}.png`),Buffer.from(bytes));
     }
     record('native PNG decoding', dimensions);
     const zip = await api('/export', { requests }); assert.equal(zip.count, 3);
