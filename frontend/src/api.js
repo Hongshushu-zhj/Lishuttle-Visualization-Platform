@@ -21,6 +21,16 @@ export const getSettings = () => req('/settings');
 export const patchSettings = patch => req('/settings', { method: 'PATCH', body: JSON.stringify(patch) });
 export const getPreferences = () => req('/preferences');
 export const patchPreferences = patch => req('/preferences', { method: 'PATCH', body: JSON.stringify(patch) });
+export const getEnvironment = () => req('/environment');
+export const discoverMatlab = () => req('/environment/candidates');
+export const startEnvironmentCheck = executable => req('/environment/check', { method: 'POST', body: JSON.stringify({ executable }) });
+export const getEnvironmentCheck = id => req(`/environment/check/${encodeURIComponent(id)}`);
+export const cancelEnvironmentCheck = id => req(`/environment/check/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+export const getOnboarding = () => req('/onboarding');
+export const completeOnboarding = () => req('/onboarding/complete', { method: 'POST' });
+export const addDemoSource = () => req('/onboarding/demo', { method: 'POST' });
+export const importLegacy = (directory, preferencesFile) => req('/settings/import', { method: 'POST', body: JSON.stringify({ directory, preferencesFile }) });
+export const relocateSource = (id, path) => req(`/sources/${id}/relocate`, { method: 'POST', body: JSON.stringify({ path }) });
 
 export const listSources = () => req('/sources');
 export const addSource = (path) => req('/sources', { method: 'POST', body: JSON.stringify({ path }) });

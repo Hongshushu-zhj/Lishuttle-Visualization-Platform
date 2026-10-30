@@ -59,6 +59,8 @@
 <script setup>
 import { ref } from 'vue';
 import * as api from '../api';
+import { desktopBridge, isDesktop } from '../desktopBridge';
+import { ElMessage } from 'element-plus';
 
 const emit = defineEmits(['select']);
 const visible = ref(false);
@@ -110,7 +112,12 @@ function confirm() {
   visible.value = false;
 }
 
-defineExpose({ open: () => (visible.value = true) });
+async function open() {
+  if (!isDesktop) { visible.value = true; return; }
+  try { const selected = await desktopBridge.selectDirectory(); if (selected) emit('select', selected); }
+  catch (error) { ElMessage.error(error.message); }
+}
+defineExpose({ open });
 </script>
 
 <style scoped>

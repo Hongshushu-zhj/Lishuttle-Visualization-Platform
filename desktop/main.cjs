@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, session, ipcMain, dialog, Menu, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -74,10 +74,8 @@ async function start() {
     window.on('close', event => { if (acceptanceActive) event.preventDefault(); });
   }
   registerDownloads(appSession, () => window, () => origin);
-  ipcMain.handle('desktop:app-info', event => {
-    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('未授权桌面调用');
-    return { version: app.getVersion(), channel, electron: process.versions.electron, node: process.versions.node };
-  });
+  require('./ipc.cjs').registerDesktopIpc({ ipcMain, dialog, shell, getWindow: () => window, getOrigin: () => origin, paths,
+    getAppInfo: () => ({ version: app.getVersion(), channel, electron: process.versions.electron, node: process.versions.node }) });
   backend.child.on('exit', () => { if (!shuttingDown && !allowQuit) showFailure(new Error('本地服务已断开，请退出后重试')); });
   await window.loadURL(origin);
 }

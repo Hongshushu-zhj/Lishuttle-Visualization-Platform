@@ -10,6 +10,7 @@ test('Electron 随机端口重新启动后从用户文件恢复色标，而非�
   try {
     app = await electron.launch({ args: [root], env });
     let page = await app.firstWindow(); await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+/);
+    await page.getByRole('button', { name: '先跳过 MATLAB 并进入' }).click();
     await page.getByRole('button', { name: '全局色标配置' }).click();
     const row = page.locator('.preset-row').first();
     await row.locator('input').nth(0).fill('-111');

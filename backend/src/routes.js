@@ -200,6 +200,19 @@ router.post('/sources/:id/refresh', (req, res) => {
   res.json(pubSource(sourcesStore.updateScan(s.id, scan)));
 });
 
+router.post('/sources/:id/relocate', (req, res, next) => {
+  try {
+    const source = sourcesStore.get(req.params.id);
+    if (!source) throw httpErr(404, '数据源不存在');
+    const target = req.body?.path;
+    if (typeof target !== 'string' || !path.isAbsolute(target)) throw httpErr(400, '请选择有效的绝对目录');
+    const scan = scanSource(target); if (!scan.ok) throw httpErr(400, scan.error);
+    const updated = { ...source, path: path.resolve(target), name: path.basename(target), scan, offline: false };
+    sourcesStore.replace(sourcesStore.list().map(item => item.id === source.id ? updated : item));
+    res.json(pubSource(updated));
+  } catch (error) { next(error); }
+});
+
 router.post('/sources/:id/open-results', async (req, res) => {
   try {
     const folder = await openResultsFolder(req.params.id, req.body.dataType || '', undefined, req.body.taskId);

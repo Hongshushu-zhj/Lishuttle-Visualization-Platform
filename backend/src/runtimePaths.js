@@ -17,6 +17,7 @@ function resolveRuntimePaths({ channel, dataDir, resourcesDir, sourceRoot, local
     }
   }
   return Object.freeze({ channel, dataDir: root, matlabDir: path.join(resources, 'matlab'),
+    demoDir: path.join(resources, resourcesDir ? 'demo/demo' : '.desktop-build/demo/demo'),
     frontendDir: path.join(resources, resourcesDir ? 'frontend' : 'frontend/dist'),
     jobsDir: path.join(root, 'jobs'), exportDir: path.join(root, 'exports'), cacheDir: path.join(root, 'cache') });
 }

@@ -56,7 +56,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   });
   app.use('/api/preview/save', express.json({ limit: '21mb' }));
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api', createDesktopRoutes({ settingsStore, environment }));
+  app.use('/api', createDesktopRoutes({ settingsStore, environment, paths, sourcesStore }));
   app.use('/api', createRoutes({ ...runtime, sourcesStore, jobQueue: jobs, cache, exporter, ...analysis, ...folders }));
   app.use(express.static(paths.frontendDir));
   app.get('*', (req, res) => {

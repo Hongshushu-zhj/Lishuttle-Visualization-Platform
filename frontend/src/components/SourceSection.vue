@@ -149,6 +149,7 @@ import {
 } from '@element-plus/icons-vue';
 import * as api from '../api';
 import FigureCard from './FigureCard.vue';
+import { ensurePlotReady } from '../desktopState';
 
 const props = defineProps({
   source: { type: Object, required: true },
@@ -246,6 +247,7 @@ async function loadCached() {
 }
 
 async function startPlot() {
+  if (!ensurePlotReady()) return;
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;

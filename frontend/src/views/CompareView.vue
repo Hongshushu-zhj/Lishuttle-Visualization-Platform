@@ -210,6 +210,7 @@ import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Grid, MagicStick, Download, FolderAdd, Warning, Loading } from '@element-plus/icons-vue';
 import * as api from '../api';
+import { ensurePlotReady } from '../desktopState';
 import { addSource, knownTypes, taskSources } from '../store';
 import FigureCard from '../components/FigureCard.vue';
 import FolderPicker from '../components/FolderPicker.vue';
@@ -359,6 +360,7 @@ async function refreshGrid(dryRun = true) {
 }
 
 async function run() {
+  if (!ensurePlotReady()) return;
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;

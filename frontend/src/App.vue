@@ -4,9 +4,11 @@
       <div class="app-header__left">
         <el-icon size="22" style="color: #1f6feb"><Picture /></el-icon>
         <span class="app-header__title">天线覆盖绘图平台</span>
-        <span class="muted">基于 MATLAB 仿真结果自动出图</span>
+        <el-tag size="small" :type="desktop.state.appInfo?.channel === 'stable' ? 'success' : 'warning'">{{ desktop.state.appInfo?.channel === 'stable' ? '稳定版' : '开发版' }}</el-tag>
       </div>
       <div class="app-header__right" style="display: flex; align-items: center; gap: 12px">
+        <el-button link :type="desktop.isReady() ? 'success' : 'warning'" @click="desktop.state.open = true">{{ environmentLabel(desktop.state.environment) }}</el-button>
+        <el-button @click="desktop.state.open = true">应用设置</el-button>
         <GlobalColorRanges />
         <el-radio-group v-model="currentView" size="default">
           <el-radio-button value="plot">
@@ -29,29 +31,51 @@
         :closable="false"
         show-icon
         style="margin: 12px 20px 0"
-        title="无法连接后端服务"
-        :description="state.backendError + ' —— 请确认已通过 启动平台.bat 或 node server.js 启动后端(默认端口 8000)'"
-      />
+        title="本地服务连接中断"
+        :description="state.backendError + '。请重试；仍不可用时重新打开应用，并在设置中查看日志。'"
+      ><el-button size="small" @click="retry">重试连接</el-button><el-button size="small" @click="desktop.state.open = true">设置与诊断</el-button></el-alert>
+      <el-alert v-if="desktop.state.loaded && desktop.state.onboarding.warnings?.length" :title="desktop.state.onboarding.warnings.join('；')" type="warning" :closable="false" />
       <PlotView v-show="currentView === 'plot'" />
       <CompareView v-show="currentView === 'compare'" />
       <AnalysisView v-if="analysisOpened" v-show="currentView === 'analysis'" />
     </el-main>
   </el-container>
+  <AppSettings />
+  <FirstRunWizard />
 </template>
 
 <script setup>
-import { onMounted, ref, watch, defineAsyncComponent } from 'vue';
+import { onMounted, onUnmounted, ref, watch, defineAsyncComponent } from 'vue';
 import { state, loadSources } from './store';
 import PlotView from './views/PlotView.vue';
 import GlobalColorRanges from './components/GlobalColorRanges.vue';
 import CompareView from './views/CompareView.vue';
+import AppSettings from './components/AppSettings.vue';
+import FirstRunWizard from './components/FirstRunWizard.vue';
+import { desktop } from './desktopState';
+import { desktopBridge } from './desktopBridge';
+import { environmentLabel } from './desktopModel.mjs';
 
 const currentView = ref('plot');
 const AnalysisView = defineAsyncComponent(() => import('./views/AnalysisView.vue'));
 const analysisOpened = ref(false);
 watch(currentView, view => { if (view === 'analysis') analysisOpened.value = true; });
 
-onMounted(loadSources);
+let poll, polling = false;
+async function retry() {
+  await loadSources();
+  try { await desktop.load(); desktop.state.appInfo = await desktopBridge.getAppInfo(); }
+  catch (error) { state.backendOk = false; state.backendError = error.message; }
+}
+onMounted(async () => {
+  await retry();
+  poll = setInterval(async () => {
+    if (polling || !desktop.state.checking) return;
+    polling = true;
+    try { await desktop.pollCheck(); } catch { /* settings shows retryable error */ } finally { polling = false; }
+  }, 1000);
+});
+onUnmounted(() => clearInterval(poll));
 </script>
 
 <style scoped>
