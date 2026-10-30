@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:analysis": "node --test scripts/analysis-model.test.mjs"
   },
+  "overrides": { "source-map-js": "1.2.2" },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "echarts": "^6.1.0",

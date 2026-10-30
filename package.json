@@ -1,7 +1,7 @@
 {
   "name": "antenna-draw-desktop",
   "productName": "AntennaDraw Dev",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "desktopChannel": "dev",
   "description": "天线覆盖绘图平台 Windows 桌面版",
   "author": "AntennaDraw contributors",

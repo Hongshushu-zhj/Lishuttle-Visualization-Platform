@@ -2,7 +2,7 @@
 
 目标环境：Windows 11 x64、用户自备有效许可的 MATLAB。R2022a 为本机完整验证基线；R2024b 的 alpha.2 外机证据不替代新候选复测。无需安装 Node.js、npm 或复制源码，不需要终端命令。
 
-1. 使用 `release/stable/AntennaDraw-Setup-1.0.0-rc.2-x64.exe`，双击后选择当前用户安装。此包未签名，核对本地交付清单的 SHA-256；来源不明或哈希不符时不要运行。
+1. 使用 `release/stable/AntennaDraw-Setup-1.0.0-rc.3-x64.exe`，双击后选择当前用户安装。此包未签名，核对本地交付清单的 SHA-256；来源不明或哈希不符时不要运行。
 2. 从桌面 AntennaDraw 快捷方式启动，首次引导选择 MATLAB 的 `bin/matlab.exe`，点击保存并检测，等待室内/室外微型出图完成。
 3. 可先使用演示数据，也可通过添加按钮选择含 pred 的仿真结果目录；不复制、改写输入 DEM。
 4. 选择任务、指标和层。绘图、对比、色标、分析保持原功能；任务记录可查看逐图失败、取消、重试、下载及历史位置。
@@ -15,6 +15,6 @@ stable 用户数据位于 `%LOCALAPPDATA%/AntennaDraw`；dev 位于 `%LOCALAPPDA
 
 采用手动覆盖安装升级。安装和卸载默认保留用户配置、源数据和结果；再次安装应恢复原配置。较新 schema 会拒绝旧版降写。需要回滚时先备份完整用户数据根，不能拿旧版盲目覆盖较新配置。
 
-开发包为 `release/dev/AntennaDraw-Dev-Setup-1.0.0-rc.2-x64.exe`，安装和桌面名称含 Dev，可与 stable 共存。不要仅改名把 Dev 当作正式包。
+开发包为 `release/dev/AntennaDraw-Dev-Setup-1.0.0-rc.3-x64.exe`，安装和桌面名称含 Dev，可与 stable 共存。不要仅改名把 Dev 当作正式包。
 
 安装自检从顶部“安装自检”菜单运行，选择 MATLAB 和报告目录。自动检查只覆盖合成样本技术链路；最终验收还需真实案例、离线/重启、升级和异常测试，见 release-checklist.md。
