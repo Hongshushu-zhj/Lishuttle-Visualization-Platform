@@ -1,8 +1,8 @@
 # 阶段 A 技术原型
 
-这是开发候选 `1.0.0-alpha.1`，不是正式 Desktop V1。应用标识 `com.antennadraw.desktop.dev`；正式稳定版不使用该安装包。
+当前开发候选为 `1.0.0-alpha.2`，不是正式 Desktop V1。应用标识 `com.antennadraw.desktop.dev`；正式稳定版不使用该安装包。
 
-后续 alpha.2 补充跨设备阶段 A 验收工具；请使用该版本及 `external-test-guide.txt` 在另一台设备测试。安装后可在菜单选择 MATLAB 并自动生成报告，不依赖开发 smoke 的环境变量。此入口是测试材料，正式设置页仍属于后续任务。
+alpha.2 补充跨设备阶段 A 验收工具；请使用该版本及 `external-test-guide.txt` 在另一台设备测试。安装后可在菜单选择 MATLAB 并自动生成报告，不依赖开发 smoke 的环境变量。此入口是测试材料，正式设置页仍属于后续任务。
 
 ## 开发者复现
 
