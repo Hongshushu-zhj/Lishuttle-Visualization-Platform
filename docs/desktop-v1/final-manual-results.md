@@ -1,7 +1,7 @@
 # RC3 外机手工结果（待测试者填写）
 
-安装包文件名：
-SHA-256：
+安装包文件名：AntennaDraw-Setup-1.0.0-rc.3-x64.exe
+SHA-256：9bf453455cf9e30b96209a02023185f3dbdd3b288e9cc3db3542e36c22c875bb
 Windows 精确版本：
 MATLAB 完整版本：
 普通用户、无 Node.js/无源码是否确认：

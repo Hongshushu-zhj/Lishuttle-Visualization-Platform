@@ -12,6 +12,8 @@ Desktop V1 候选为 **1.0.0-rc.3**，等待最终独立设备验收，尚未确
 
 详细材料：`docs/desktop-v1/install-guide.md`、`external-final-guide.md`、`acceptance-report.md`、`release-checklist.md`。旧 alpha.2 的外机报告不替代 RC3 最终验收。
 
+最终本地交付目录为 `release/交付-RC3`，包含 stable 安装包、开发测试包、SHA256SUMS.txt、说明、手工验收表和第三方许可。先阅读 `00-先读.txt`；不要使用中间构建或依赖 `.desktop-test-data` 内的测试安装位置。
+
 下列为源码浏览器模式的开发部署说明，桌面安装使用者不需要执行这些步骤。
 
 ## 1. 部署与启动
