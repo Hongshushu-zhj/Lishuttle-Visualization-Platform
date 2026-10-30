@@ -46,7 +46,7 @@ class JobQueue {
     this.running++;
     try {
       const pending = job.figures.filter((f) => f.status === 'pending');
-      await runMatlabJob(
+      const result = await runMatlabJob(
         job,
         pending,
         (idx) => {
@@ -69,6 +69,7 @@ class JobQueue {
           pending[idx].axes = axes;
         }
       );
+      if (result && result.status !== 'done') throw Object.assign(new Error(result.error || result.stderr || `MATLAB 任务${result.status}`), { runResult: result });
       job.status = 'done';
     } catch (e) {
       job.status = 'failed';

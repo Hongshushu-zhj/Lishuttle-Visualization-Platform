@@ -1,84 +1,57 @@
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { GROUND_LAYER } = require('./plotTypes');
+const { createProcessSupervisor } = require('./processSupervisor');
+const { matlabString } = require('./matlabEnvironment');
 
-// 启动一次 MATLAB -batch 执行 job 中所有待画图。
-// figures: 本次要画的 job figure 对象列表(与 job.json 顺序一致)
-// stdout 协议(由 plot_dispatch.m 输出):
-//   PROGRESS i/N          第 i 张成功
-//   AXES i x1 x2 y1 y2    第 i 张图实际使用的坐标范围(核对统一范围用)
-//   FIGURE_ERROR i 消息   第 i 张失败(继续画下一张)
-//   DONE                  全部完成
-function createMatlabRunner({ config, JOBS_DIR, MATLAB_DIR, launch = spawn }) {
-function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
-  return new Promise((resolve, reject) => {
-    const jobDir = path.join(JOBS_DIR, job.id);
-    fs.mkdirSync(jobDir, { recursive: true });
+function createMatlabRunner({ config, JOBS_DIR, MATLAB_DIR, supervisor }) {
+  supervisor ||= createProcessSupervisor({ stateDir: path.join(JOBS_DIR, 'processes') });
+  async function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes, options = {}) {
+    if (!/^[A-Za-z0-9_-]+$/.test(job.id)) throw new Error('绘图任务标识无效');
+    const snapshot = options.settingsSnapshot || { ...config };
+    const jobDir = path.join(JOBS_DIR, job.id); fs.mkdirSync(jobDir, { recursive: true });
     const jobFile = path.join(jobDir, 'job.json');
-    const taskFigures = figures.map((f) => ({
-      preddir: f.preddir,
-      taskName: f.taskName || '',
-      dataType: f.dataType,
-      layer: f.layer === GROUND_LAYER ? '' : f.layer,
-      layerLabel: f.layerLabel || '',
-      outFile: f.pngFile,
-      // 室内:直接给出数据文件、墙线文件与范围(室内 index.txt 格式与室外不同)
-      indoor: !!f.indoor,
-      demFile: f.demFile,
-      wallFile: f.wallsFile || '',
-      bounds: f.bounds || null,
-      // 统一坐标范围(同一批图一致)与坐标显示方式,由 plot_dispatch.m 应用
-      xlim: f.xlim || null,
-      ylim: f.ylim || null,
-      coordMode: f.coordMode || 'abs',
-    }));
+    const taskFigures = figures.map(f => ({ preddir: f.preddir, taskName: f.taskName || '', dataType: f.dataType,
+      layer: f.layer === GROUND_LAYER ? '' : f.layer, layerLabel: f.layerLabel || '', outFile: f.pngFile,
+      indoor: !!f.indoor, demFile: f.demFile, wallFile: f.wallsFile || '', bounds: f.bounds || null,
+      xlim: f.xlim || null, ylim: f.ylim || null, coordMode: f.coordMode || 'abs' }));
     fs.writeFileSync(jobFile, JSON.stringify({ figures: taskFigures }));
-
-    const matlabString = value => value.replace(/'/g, "''");
     const code = `fprintf('ANTENNA_MATLAB_VERSION %s\\n',version); addpath('${matlabString(MATLAB_DIR)}'); plot_dispatch('${matlabString(jobFile)}');`;
-    const proc = launch(config.matlabExe, ['-batch', code], { shell: false, windowsHide: true, cwd: MATLAB_DIR });
-
-    let stderr = '';
-    let sawDone = false;
-    let stdoutBuffer = ''; // stdout 按块到达,需缓存半行,否则长行会被截断漏解析
-    proc.stdout.on('data', (d) => {
-      stdoutBuffer += d.toString();
-      const lines = stdoutBuffer.split(/\r?\n/);
-      stdoutBuffer = lines.pop(); // 最后一段可能是半行,留到下次
-      for (const line of lines) {
+    let buffer = '', sawDone = false, protocolError;
+    const outcomes = new Set();
+    const indexOf = text => { const index = Number(text) - 1; if (!Number.isInteger(index) || index < 0 || index >= figures.length) throw new Error('MATLAB 返回无效图序号'); return index; };
+    function parse(line) {
+      if (protocolError) return;
+      try {
         const version = line.match(/^ANTENNA_MATLAB_VERSION\s+(.+)$/);
-        if (version) { job.matlabVersion = version[1].slice(0, 100); continue; }
-        const m = line.match(/^PROGRESS\s+(\d+)\/(\d+)/);
-        if (m) {
-          onFigureDone(Number(m[1]) - 1);
-          continue;
+        if (version) { job.matlabVersion = version[1].slice(0, 100); return; }
+        const axes = line.match(/^AXES\s+(\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)/);
+        if (axes) { const index = indexOf(axes[1]); onFigureAxes?.(index, axes.slice(2).map(Number)); return; }
+        const done = line.match(/^PROGRESS\s+(\d+)\/(\d+)$/), failure = line.match(/^FIGURE_ERROR\s+(\d+)\s+(.*)$/);
+        if (done || failure) {
+          const index = indexOf((done || failure)[1]);
+          if (outcomes.has(index)) throw new Error('MATLAB 重复报告同一图的结果');
+          if (done && Number(done[2]) !== figures.length) throw new Error('MATLAB 返回的图片总数不一致');
+          outcomes.add(index); done ? onFigureDone?.(index) : onFigureError?.(index, failure[2]); return;
         }
-        const ax = line.match(/^AXES\s+(\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)/);
-        if (ax && onFigureAxes) {
-          const idx = Number(ax[1]) - 1;
-          if (idx >= 0 && idx < figures.length) {
-            onFigureAxes(idx, [Number(ax[2]), Number(ax[3]), Number(ax[4]), Number(ax[5])]);
-          }
-          continue;
-        }
-        const fe = line.match(/^FIGURE_ERROR\s+(\d+)\s+(.*)$/);
-        if (fe) onFigureError(Number(fe[1]) - 1, fe[2]);
-        if (/^DONE/.test(line.trim())) sawDone = true;
-      }
-    });
-    proc.stderr.on('data', (d) => {
-      stderr += d.toString();
-    });
-    proc.on('error', (err) => reject(err));
-    proc.on('close', (exitCode) => {
-      if (exitCode === 0 && sawDone) resolve();
-      else reject(new Error((stderr || `MATLAB 进程异常退出(exit ${exitCode})`).slice(-2000)));
-    });
-  });
-}
-
-return { runMatlabJob };
+        if (line.trim() === 'DONE') sawDone = true;
+      } catch (error) { protocolError = error; }
+    }
+    const result = await supervisor.run({ executable: snapshot.matlabExe, args: ['-batch', code], cwd: MATLAB_DIR,
+      signal: options.signal, timeoutMs: options.timeoutMs || (snapshot.jobTimeoutMinutes || 30) * 60000,
+      onStdout(text) {
+        buffer += text; const lines = buffer.split(/\r?\n/); buffer = lines.pop();
+        if (buffer.length > 65536) { protocolError = new Error('MATLAB 输出行过长'); buffer = ''; }
+        for (const line of lines) parse(line);
+      } });
+    if (buffer) parse(buffer);
+    if (!result.cleanupConfirmed) throw Object.assign(new Error('MATLAB 所属进程退出尚未确认'), { code: 'PROCESS_CLEANUP_UNCONFIRMED', runResult: result });
+    if (result.status === 'done' && (!sawDone || outcomes.size !== figures.length || protocolError)) {
+      throw Object.assign(protocolError || new Error('MATLAB 没有返回完整绘图结果'), { code: 'MATLAB_PROTOCOL_INVALID', runResult: result });
+    }
+    return result;
+  }
+  return { runMatlabJob };
 }
 const { lazyService } = require('./lazyService');
 module.exports = lazyService(() => createMatlabRunner(require('./config')), { createMatlabRunner });

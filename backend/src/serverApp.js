@@ -13,6 +13,8 @@ const { createOpenResultsFolder } = require('./openResultsFolder');
 const { createRoutes } = require('./routes');
 const { createSettingsStore } = require('./settingsStore');
 const { createDesktopRoutes } = require('./desktopRoutes');
+const { createProcessSupervisor } = require('./processSupervisor');
+const { createMatlabEnvironment } = require('./matlabEnvironment');
 
 function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, devOrigin } = {}) {
   if (!paths || !path.isAbsolute(paths.dataDir)) throw new Error('必须显式提供运行目录');
@@ -21,7 +23,9 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   const runtime = createConfig({ paths, settingsStore });
   const sourcesStore = createSourcesStore(runtime.SOURCES_FILE);
   const cache = createCache({ ...runtime, sourcesStore });
-  const runner = createMatlabRunner(runtime);
+  const supervisor = createProcessSupervisor({ stateDir: path.join(paths.dataDir, 'processes') });
+  const environment = createMatlabEnvironment({ paths, supervisor, settingsStore });
+  const runner = createMatlabRunner({ ...runtime, supervisor });
   const jobs = createJobQueue({ ...runtime, ...runner, cache });
   const analysis = createAnalysisService({ store: sourcesStore });
   const exporter = createExporter(runtime);
@@ -52,7 +56,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   });
   app.use('/api/preview/save', express.json({ limit: '21mb' }));
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api', createDesktopRoutes({ settingsStore }));
+  app.use('/api', createDesktopRoutes({ settingsStore, environment }));
   app.use('/api', createRoutes({ ...runtime, sourcesStore, jobQueue: jobs, cache, exporter, ...analysis, ...folders }));
   app.use(express.static(paths.frontendDir));
   app.get('*', (req, res) => {
@@ -63,7 +67,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   });
   app.use((error, req, res, next) => { res.status(error.status || 500).json({ error: error.message }); });
   return {
-    app, jobs, paths, settingsStore, sourcesStore,
+    app, jobs, paths, settingsStore, sourcesStore, environment, supervisor,
     listen({ host = '127.0.0.1', port = 0 } = {}) {
       if (host !== '127.0.0.1') return Promise.reject(new Error('仅允许绑定本机回环地址'));
       if (server) return Promise.reject(new Error('服务已经启动'));
