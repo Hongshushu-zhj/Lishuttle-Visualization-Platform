@@ -247,6 +247,7 @@ router.get('/jobs/:id', (req, res) => {
     total: job.total,
     done: job.done,
     failed: job.failed,
+    matlabVersion: job.matlabVersion || null,
     error: job.error,
     figures: job.figures.map(pubFigure),
   });

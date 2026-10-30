@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, session, ipcMain, dialog, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -16,13 +16,14 @@ fs.mkdirSync(dataDir, { recursive: true });
 app.setPath('userData', path.join(dataDir, 'electron'));
 app.setPath('sessionData', path.join(dataDir, 'session'));
 const primary = app.requestSingleInstanceLock();
-let window, backend, origin, allowQuit = false, shuttingDown = false;
+let window, backend, origin, allowQuit = false, shuttingDown = false, acceptanceActive = false;
 if (!primary) app.quit();
 else {
   app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
   app.on('before-quit', event => {
     if (allowQuit) return;
     event.preventDefault();
+    if (acceptanceActive) return;
     if (shuttingDown) return;
     shuttingDown = true;
     Promise.resolve(backend?.stop()).then(() => { allowQuit = true; app.quit(); }).catch(async error => {
@@ -61,6 +62,19 @@ async function start() {
   appSession.setPermissionCheckHandler(() => false);
   await appSession.cookies.set({ url: origin, name: cookieName, value: secret, httpOnly: true, sameSite: 'strict', path: '/' });
   window = makeWindow(appSession);
+  if (dev) {
+    const menu = Menu.buildFromTemplate([{ label: '安装验收', submenu: [{ id: 'desktop-acceptance', label: '运行阶段 A 安装验收…',
+      click: async item => {
+        if (acceptanceActive) return;
+        acceptanceActive = true; item.enabled = false;
+        try { await require('./acceptance.cjs').runDesktopAcceptance({ parent: window, resources }); }
+        catch (error) { await dialog.showMessageBox(window, { type: 'error', message: '验收未完成', detail: error.message, buttons: ['确定'] }); }
+        finally { acceptanceActive = false; item.enabled = true; }
+      },
+    }] }]);
+    Menu.setApplicationMenu(menu); window.setMenu(menu);
+    window.on('close', event => { if (acceptanceActive) event.preventDefault(); });
+  }
   registerDownloads(appSession, () => window, () => origin);
   ipcMain.handle('desktop:app-info', event => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('未授权桌面调用');

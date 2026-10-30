@@ -10,7 +10,7 @@ const { GROUND_LAYER } = require('./plotTypes');
 //   AXES i x1 x2 y1 y2    第 i 张图实际使用的坐标范围(核对统一范围用)
 //   FIGURE_ERROR i 消息   第 i 张失败(继续画下一张)
 //   DONE                  全部完成
-function createMatlabRunner({ config, JOBS_DIR, MATLAB_DIR }) {
+function createMatlabRunner({ config, JOBS_DIR, MATLAB_DIR, launch = spawn }) {
 function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
   return new Promise((resolve, reject) => {
     const jobDir = path.join(JOBS_DIR, job.id);
@@ -35,9 +35,9 @@ function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
     }));
     fs.writeFileSync(jobFile, JSON.stringify({ figures: taskFigures }));
 
-    const code = `addpath('${MATLAB_DIR}'); plot_dispatch('${jobFile}');`;
-    const cmd = `"${config.matlabExe}" -batch "${code}"`;
-    const proc = spawn(cmd, { shell: true, windowsHide: true, cwd: MATLAB_DIR });
+    const matlabString = value => value.replace(/'/g, "''");
+    const code = `fprintf('ANTENNA_MATLAB_VERSION %s\\n',version); addpath('${matlabString(MATLAB_DIR)}'); plot_dispatch('${matlabString(jobFile)}');`;
+    const proc = launch(config.matlabExe, ['-batch', code], { shell: false, windowsHide: true, cwd: MATLAB_DIR });
 
     let stderr = '';
     let sawDone = false;
@@ -47,6 +47,8 @@ function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
       const lines = stdoutBuffer.split(/\r?\n/);
       stdoutBuffer = lines.pop(); // 最后一段可能是半行,留到下次
       for (const line of lines) {
+        const version = line.match(/^ANTENNA_MATLAB_VERSION\s+(.+)$/);
+        if (version) { job.matlabVersion = version[1].slice(0, 100); continue; }
         const m = line.match(/^PROGRESS\s+(\d+)\/(\d+)/);
         if (m) {
           onFigureDone(Number(m[1]) - 1);

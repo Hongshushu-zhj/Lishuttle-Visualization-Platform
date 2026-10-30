@@ -2,6 +2,8 @@
 
 这是开发候选 `1.0.0-alpha.1`，不是正式 Desktop V1。应用标识 `com.antennadraw.desktop.dev`；正式稳定版不使用该安装包。
 
+后续 alpha.2 补充跨设备阶段 A 验收工具；请使用该版本及 `external-test-guide.txt` 在另一台设备测试。安装后可在菜单选择 MATLAB 并自动生成报告，不依赖开发 smoke 的环境变量。此入口是测试材料，正式设置页仍属于后续任务。
+
 ## 开发者复现
 
 根目录执行 `npm ci`，然后分别在 backend 和 frontend 执行 `npm ci`。构建网页后可运行 `npm run test:desktop`。`npm run desktop:dev` 自动安装两个子项目的锁定依赖并构建网页；打包入口 `desktop:pack` / `desktop:dist` 同样负责这些步骤。安装后的应用不执行 npm、不需要外部 Node。

@@ -1,10 +1,11 @@
 const path = require('node:path');
 const { utilityProcess } = require('electron');
 
-function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName, settings, failForTest = false }) {
+function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName, settings, matlabPrefDir, failForTest = false }) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'MATLABPATH']) delete env[key];
+    if (matlabPrefDir) env.MATLAB_PREFDIR = matlabPrefDir;
     const child = utilityProcess.fork(entry, [], { cwd: path.dirname(entry), env, stdio: 'pipe', serviceName: 'AntennaDraw Backend' });
     let ready = false, stopped = false, stopPromise;
     const timer = setTimeout(() => fail(new Error('本地服务启动超时')), 30000);
