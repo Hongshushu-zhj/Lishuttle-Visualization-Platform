@@ -10,11 +10,11 @@ const { runAcceptanceChecks } = require('./acceptanceChecks.cjs');
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function writeSummary(reportDir, report) {
   const checks = report.checks.map(check => `<li>${escape(check.status)} — ${escape(check.name)}${check.message ? '：' + escape(check.message) : ''}</li>`).join('');
-  const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'"><title>阶段 A 安装验收报告</title>
+  const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'"><title>安装技术自检报告</title>
   <style>body{font:16px/1.7 'Microsoft YaHei',sans-serif;max-width:1000px;margin:32px auto;padding:0 24px;color:#172b4d}img{max-width:100%;border:1px solid #ddd}h1{font-size:26px}code{background:#f2f4f7;padding:3px}</style>
-  <h1>阶段 A 自动检查：${escape(report.status)}</h1><p>版本 ${escape(report.build.version)} · ${escape(report.environment.release)} · Electron ${escape(report.environment.electron)}</p>
+  <h1>安装技术自检：${escape(report.status)}</h1><p>版本 ${escape(report.build.version)} · ${escape(report.environment.release)} · Electron ${escape(report.environment.electron)}</p>
   <ul>${checks}</ul><p>干净环境由测试者确认：${report.cleanEnvironmentConfirmed ? '是' : '否'}。自动通过后仍需人工查看三张图、断网使用并重启应用，不代表完整 V1 已通过。</p>
-  <p>请将本目录的 <code>acceptance-report.json</code> 和三张 sample PNG 带回。报告仅包含版本和合成样本结果，不包含 MATLAB 许可、业务 DEM 或会话凭证。</p>
+  <p>请带回整个报告目录，包含 <code>acceptance-report.json</code>、三张 sample PNG、<code>downloads</code> 和本 HTML。请实际打开下载 PNG，并解压 <code>downloads/figures.zip</code> 核对三张图。报告仅包含版本和合成样本结果，不包含 MATLAB 许可、业务 DEM 或会话凭证。</p>
   ${[1, 2, 3].filter(i => fs.existsSync(path.join(reportDir, `sample-${i}.png`))).map(i => `<h2>样图 ${i}</h2><img src="sample-${i}.png">`).join('')}`;
   fs.writeFileSync(path.join(reportDir, '验收结果.html'), html);
 }
@@ -53,7 +53,7 @@ async function runDesktopAcceptance({ parent, resources }) {
     testSession.setPermissionRequestHandler((contents, permission, callback) => callback(false));
     testSession.setPermissionCheckHandler(() => false);
     testWindow.on('close', event => { if (running) { event.preventDefault(); testWindow.focus(); } });
-    await testWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><style>body{font:18px/1.8 sans-serif;padding:40px}</style><h1>阶段 A 安装验收</h1><p id="status">正在准备包内合成样本…</p><p>MATLAB 启动和绘图可能需要数分钟。结束后会显示结果和三张样图。</p>'));
+    await testWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><style>body{font:18px/1.8 sans-serif;padding:40px}</style><h1>安装技术自检</h1><p id="status">正在准备包内合成样本…</p><p>MATLAB 启动和绘图可能需要数分钟。结束后会显示结果和三张样图。</p>'));
     fs.cpSync(demoResource, sourceDir, { recursive: true, errorOnExist: true, force: false });
     const paths = { channel: 'dev', dataDir, matlabDir: path.join(resources, 'matlab'),
       frontendDir: path.join(resources, app.isPackaged ? 'frontend' : 'frontend/dist'),
@@ -109,12 +109,12 @@ async function runDesktopAcceptance({ parent, resources }) {
   }
   writeSummary(reportDir, report);
   if (testWindow && !testWindow.isDestroyed()) {
-    testWindow.setTitle('阶段 A 验收结果：' + report.status);
+    testWindow.setTitle('安装技术自检结果：' + report.status);
     await testWindow.loadFile(path.join(reportDir, '验收结果.html'));
   }
-  const result = await dialog.showMessageBox(testWindow || parent, { type: report.status === 'PASS' ? 'info' : 'error', title: '阶段 A 验收结果',
+  const result = await dialog.showMessageBox(testWindow || parent, { type: report.status === 'PASS' ? 'info' : 'error', title: '安装技术自检结果',
     message: report.status === 'PASS' ? '自动检查通过，请查看三张样图并带回报告。' : '验收未通过，报告已保存，请带回查看。',
-    detail: `报告目录：${reportDir}\n只需带回 acceptance-report.json 和 sample-1/2/3.png。\n此结果不代表完整 Desktop V1 已通过。`,
+    detail: `报告目录：${reportDir}\n请带回整个报告目录，包含 acceptance-report.json、sample-1/2/3.png、downloads 和验收结果.html。请实际解压 downloads/figures.zip 核对三张图。\n此结果不代表完整 Desktop V1 已通过。`,
     buttons: ['打开报告文件夹', '关闭提示'], defaultId: 0, cancelId: 1 });
   if (result.response === 0) await shell.openPath(reportDir);
   return { reportDir, report };
