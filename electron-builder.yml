@@ -1,0 +1,43 @@
+appId: com.antennadraw.desktop.dev
+productName: AntennaDraw Dev
+asar: true
+directories:
+  output: release
+files:
+  - desktop/*.cjs
+  - package.json
+extraResources:
+  - from: backend
+    to: backend
+    filter:
+      - desktop-entry.js
+      - package.json
+      - package-lock.json
+      - src/**
+  - from: backend/node_modules
+    to: backend/node_modules
+    filter:
+      - '**/*'
+  - from: frontend/dist
+    to: frontend
+  - from: matlab
+    to: matlab
+    filter:
+      - '*.m'
+  - from: .desktop-build/demo
+    to: demo
+  - from: .desktop-build/build-info.json
+    to: build-info.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  signExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  deleteAppDataOnUninstall: false
+artifactName: AntennaDraw-Dev-Setup-${version}-${arch}.${ext}

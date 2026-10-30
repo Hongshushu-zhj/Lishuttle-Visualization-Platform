@@ -1,9 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const sourcesStore = require('./sourcesStore');
-const cache = require('./cache');
 
+function createOpenResultsFolder({ sourcesStore, cache }) {
 async function openResultsFolder(sourceId, dataType = '', launch = spawn, taskId) {
   const source = sourcesStore.get(sourceId);
   if (!source) throw Object.assign(new Error('数据源不存在'), { status: 404 });
@@ -23,4 +22,7 @@ async function openResultsFolder(sourceId, dataType = '', launch = spawn, taskId
   return folder;
 }
 
-module.exports = { openResultsFolder };
+return { openResultsFolder };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createOpenResultsFolder({ sourcesStore: require('./sourcesStore'), cache: require('./cache') }), { createOpenResultsFolder });

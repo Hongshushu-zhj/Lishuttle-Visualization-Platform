@@ -2,10 +2,10 @@ const archiver = require('archiver');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { EXPORT_DIR } = require('./config');
 
 // figures: [{ sourceName, dataType, layer, pngFile }]
 // 打包为 data/exports/<zipId>.zip,zip 内结构:<源名>/<数据类型>/<高度层>.png
+function createExporter({ EXPORT_DIR }) {
 function createZip(figures) {
   const zipId = crypto.randomUUID();
   const zipFile = path.join(EXPORT_DIR, `${zipId}.zip`);
@@ -27,4 +27,7 @@ function createZip(figures) {
   return { zipId, zipFile, done };
 }
 
-module.exports = { createZip };
+return { createZip };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createExporter(require('./config')), { createExporter });

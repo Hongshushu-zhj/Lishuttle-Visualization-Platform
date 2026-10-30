@@ -1,11 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { CACHE_DIR } = require('./config');
 const { GROUND_LAYER } = require('./plotTypes');
-const sourcesStore = require('./sourcesStore');
 const { scanTask } = require('./scanner');
 const { createHash } = require('crypto');
 
+function createCache({ CACHE_DIR, sourcesStore }) {
 const RESULTS_DIR_NAME = '路损结果图';
 
 function resultsDir(sourceId, taskId) {
@@ -161,4 +160,7 @@ function migrateSource(sourceId) {
   return count;
 }
 
-module.exports = { RENDER_VERSION, RESULTS_DIR_NAME, resultsDir, resultFileName, migrateSource, pngPath, isCached, markCached, layerFileName, parseLayerFile };
+return { RENDER_VERSION, RESULTS_DIR_NAME, resultsDir, resultFileName, migrateSource, pngPath, isCached, markCached, layerFileName, parseLayerFile };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createCache({ CACHE_DIR: require('./config').CACHE_DIR, sourcesStore: require('./sourcesStore') }), { createCache });

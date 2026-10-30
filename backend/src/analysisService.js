@@ -4,8 +4,8 @@ const { Worker } = require('worker_threads');
 const { scanSource } = require('./scanner');
 const { PLOT_TYPES } = require('./plotTypes');
 const { resolveRaster } = require('./rasterData');
-const store = require('./sourcesStore');
 
+function createAnalysisService({ store }) {
 const VERSION = 1;
 const MAX_ACTIVE = 2, MAX_QUEUE = 256, MAX_CACHE_BYTES = 32 * 1024 * 1024;
 let active = 0, cacheBytes = 0;
@@ -91,4 +91,7 @@ async function analyzeRequest(body) {
     indoor: task.indoor, analyzedAt: new Date().toISOString(), rulesVersion: VERSION, layers: results };
 }
 
-module.exports = { analyzeRequest };
+return { analyzeRequest };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createAnalysisService({ store: require('./sourcesStore') }), { createAnalysisService });

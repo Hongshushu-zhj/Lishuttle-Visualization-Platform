@@ -31,4 +31,4 @@ MATLAB 使用工作区 `.desktop-test-data/matlab-prefs` 作为 MATLAB_PREFDIR�
 
 旧 verify-render-options 依赖端口 8000 和固定个人数据，首次运行因缺少预设源失败，退出非零；其新增的一个临时源已精确清理。现已改为随机端口、临时源、内存注册表、finally 清理。新的 JS 检查只证明 API 坐标契约，实际 MATLAB 轴与出图由独立 .m 回归证明。
 
-界面截图：尚未采集；桌面原型测试将写入 `.desktop-test-data/screenshots/`，不能以此文档宣称人工界面矩阵通过。现有大图和真实案例不纳入提交。
+界面截图：`.desktop-test-data/screenshots/desktop-baseline.png`（已通过 Playwright 采集并查看）。产物截图为 `packaged-smoke.png`。截图不代表人工功能矩阵已通过。现有大图和真实案例不纳入提交。

@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { SOURCES_FILE } = require('./config');
 const { scanSource } = require('./scanner');
 
 function hashPath(p) {
@@ -11,7 +10,7 @@ function hashPath(p) {
 // 数据源注册表,持久化到 data/sources.json。
 // 记录结构:{ id, path, name, addedAt, scan: { utm, predDir, types } }
 class SourcesStore {
-  constructor(file = SOURCES_FILE) {
+  constructor(file) {
     this.file = file;
     this.sources = [];
     this.load();
@@ -86,4 +85,6 @@ class SourcesStore {
   }
 }
 
-module.exports = new SourcesStore();
+const { lazyService } = require('./lazyService');
+const createSourcesStore = file => new SourcesStore(file);
+module.exports = lazyService(() => createSourcesStore(require('./config').SOURCES_FILE), { createSourcesStore });

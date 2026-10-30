@@ -1,11 +1,9 @@
 const crypto = require('crypto');
-const { config } = require('./config');
-const { runMatlabJob } = require('./matlabRunner');
-const cache = require('./cache');
 
 // 绘图任务队列:每个任务 = 一次 MATLAB 进程,包含一批待画图。
 // 同一时间最多跑 maxConcurrentJobs 个 MATLAB 进程(默认 1)。
 // job.figures[i].status: cached | pending | done | failed
+function createJobQueue({ config, runMatlabJob, cache }) {
 class JobQueue {
   constructor() {
     this.queue = [];
@@ -88,4 +86,7 @@ class JobQueue {
   }
 }
 
-module.exports = new JobQueue();
+return new JobQueue();
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createJobQueue({ config: require('./config').config, runMatlabJob: require('./matlabRunner').runMatlabJob, cache: require('./cache') }), { createJobQueue });

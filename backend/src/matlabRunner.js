@@ -1,7 +1,6 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { config, JOBS_DIR, MATLAB_DIR } = require('./config');
 const { GROUND_LAYER } = require('./plotTypes');
 
 // 启动一次 MATLAB -batch 执行 job 中所有待画图。
@@ -11,6 +10,7 @@ const { GROUND_LAYER } = require('./plotTypes');
 //   AXES i x1 x2 y1 y2    第 i 张图实际使用的坐标范围(核对统一范围用)
 //   FIGURE_ERROR i 消息   第 i 张失败(继续画下一张)
 //   DONE                  全部完成
+function createMatlabRunner({ config, JOBS_DIR, MATLAB_DIR }) {
 function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
   return new Promise((resolve, reject) => {
     const jobDir = path.join(JOBS_DIR, job.id);
@@ -76,4 +76,7 @@ function runMatlabJob(job, figures, onFigureDone, onFigureError, onFigureAxes) {
   });
 }
 
-module.exports = { runMatlabJob };
+return { runMatlabJob };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createMatlabRunner(require('./config')), { createMatlabRunner });

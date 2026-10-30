@@ -1,22 +1,15 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { config } = require('./config');
-const { EXPORT_DIR } = require('./config');
 const { scanSource } = require('./scanner');
-const sourcesStore = require('./sourcesStore');
-const jobQueue = require('./jobQueue');
-const cache = require('./cache');
-const exporter = require('./exporter');
 const { rasterPreview } = require('./rasterPreview');
 const { resolveRaster } = require('./rasterData');
-const { analyzeRequest } = require('./analysisService');
 const crypto = require('crypto');
-const { openResultsFolder } = require('./openResultsFolder');
 const { listDrives, listDir } = require('./fsBrowse');
 const { GROUND_LAYER, typeInfo, displayLabel, layerLabel } = require('./plotTypes');
 const { normalizeCoordMode, unionRange, variantFor } = require('./renderOptions');
 
+function createRoutes({ config, EXPORT_DIR, sourcesStore, jobQueue, cache, exporter, analyzeRequest, openResultsFolder }) {
 const router = express.Router();
 
 function httpErr(status, message) {
@@ -364,4 +357,13 @@ router.get('/export/:zipId/download', (req, res) => {
   res.download(zipFile, `figures_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`);
 });
 
-module.exports = router;
+return router;
+}
+let defaultRouter;
+module.exports = (...args) => {
+  if (!defaultRouter) defaultRouter = createRoutes({ config: require('./config').config, EXPORT_DIR: require('./config').EXPORT_DIR,
+    sourcesStore: require('./sourcesStore'), jobQueue: require('./jobQueue'), cache: require('./cache'), exporter: require('./exporter'),
+    analyzeRequest: require('./analysisService').analyzeRequest, openResultsFolder: require('./openResultsFolder').openResultsFolder });
+  return defaultRouter(...args);
+};
+module.exports.createRoutes = createRoutes;
