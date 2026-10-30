@@ -15,6 +15,9 @@
           <el-radio-button value="compare">
             <el-icon><Grid /></el-icon>&nbsp;结果对比
           </el-radio-button>
+          <el-radio-button value="analysis">
+            <el-icon><DataAnalysis /></el-icon>&nbsp;结果分析
+          </el-radio-button>
         </el-radio-group>
       </div>
     </el-header>
@@ -31,18 +34,22 @@
       />
       <PlotView v-show="currentView === 'plot'" />
       <CompareView v-show="currentView === 'compare'" />
+      <AnalysisView v-if="analysisOpened" v-show="currentView === 'analysis'" />
     </el-main>
   </el-container>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch, defineAsyncComponent } from 'vue';
 import { state, loadSources } from './store';
 import PlotView from './views/PlotView.vue';
 import GlobalColorRanges from './components/GlobalColorRanges.vue';
 import CompareView from './views/CompareView.vue';
 
 const currentView = ref('plot');
+const AnalysisView = defineAsyncComponent(() => import('./views/AnalysisView.vue'));
+const analysisOpened = ref(false);
+watch(currentView, view => { if (view === 'analysis') analysisOpened.value = true; });
 
 onMounted(loadSources);
 </script>

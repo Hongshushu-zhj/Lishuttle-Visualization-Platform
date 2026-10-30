@@ -9,6 +9,8 @@ const jobQueue = require('./jobQueue');
 const cache = require('./cache');
 const exporter = require('./exporter');
 const { rasterPreview } = require('./rasterPreview');
+const { resolveRaster } = require('./rasterData');
+const { analyzeRequest } = require('./analysisService');
 const crypto = require('crypto');
 const { openResultsFolder } = require('./openResultsFolder');
 const { listDrives, listDir } = require('./fsBrowse');
@@ -48,13 +50,7 @@ function buildFigures(requests) {
     for (const layer of layers) {
       const layerInfo = type.layers.find((l) => l.key === layer);
       if (!layerInfo) continue; // 该源没有这一层,跳过
-      const layerFile = layerInfo.file || type.file;
-      // 室外:文件名在各高度层子目录下;室内:数据文件直接位于 pred/<任务名> 下
-      const demFile = type.flat
-        ? path.join(task.predDir, layerFile)
-        : layer === GROUND_LAYER
-          ? path.join(task.predDir, layerFile)
-          : path.join(task.predDir, layer, layerFile);
+      const { demFile } = resolveRaster(task, type, layerInfo);
       if (!fs.existsSync(demFile)) continue;
       figures.push({
         key: `${source.id}|${task.id}|${req.dataType}|${layer}`,
@@ -218,6 +214,12 @@ router.post('/sources/:id/open-results', async (req, res) => {
   } catch (e) {
     res.status(e.status || 500).json({ error: `打开结果文件夹失败: ${e.message}` });
   }
+});
+
+// 全量 DEM 统计，不创建 MATLAB 绘图任务。
+router.post('/analysis', async (req, res) => {
+  try { res.json(await analyzeRequest(req.body)); }
+  catch (error) { res.status(error.status || 500).json({ error: error.message }); }
 });
 
 // ---------- 绘图 ----------

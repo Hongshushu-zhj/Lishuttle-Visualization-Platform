@@ -3,29 +3,7 @@ const path = require('path');
 
 const DEFAULT_RANGES = { RSRP: [-120, -40], SCR: [-30, 15], ECHORP: [-180, -110], DLRSSINR: [-10, 30] };
 
-// 与 MATLAB indoorGridSize 使用相同的候选顺序、取整和字节数校验。
-function gridSize(bounds, samples, indoor) {
-  const { left, right, bottom, top, res } = bounds || {};
-  if (![left, right, bottom, top, res].every(Number.isFinite) || res <= 0 || right <= left || top <= bottom) {
-    throw new Error('栅格坐标范围或分辨率不合法');
-  }
-  let width = indoor ? Math.floor((right - left) / res) : Math.ceil((right - left) / res);
-  let height = indoor ? Math.floor((top - bottom) / res) + 1 : Math.ceil((top - bottom) / res);
-  if (indoor) {
-    let best = Infinity;
-    const originalWidth = width, originalHeight = height;
-    for (let dn = -1; dn <= 1; dn++) for (let dm = -1; dm <= 1; dm++) {
-      const w = originalWidth + dn, h = originalHeight + dm;
-      if (w > 0 && h > 0 && w * h === samples && Math.abs(dn) + Math.abs(dm) < best) {
-        width = w; height = h; best = Math.abs(dn) + Math.abs(dm);
-      }
-    }
-  }
-  if (width <= 0 || height <= 0 || width * height !== samples) {
-    throw new Error(`栅格大小不匹配: 预期 ${width}×${height}，实际 ${samples} 个 int16`);
-  }
-  return { width, height };
-}
+const { gridSize, rasterRules } = require('./rasterData');
 
 function wallSegments(file) {
   if (!file || !fs.existsSync(file)) return [];
@@ -86,8 +64,7 @@ function rasterPreview(figure) {
   const width = Math.ceil(original.width / stride), height = Math.ceil(original.height / stride);
   const data = Buffer.alloc(width * height * 2);
   let min = Infinity, max = -Infinity, validCount = 0;
-  const divisor = figure.dataType === 'BESTSERVER' ? 1 : 100;
-  const zeroIsInvalid = !figure.indoor && figure.dataType === 'DLRSSINR';
+  const { divisor, zeroIsInvalid } = rasterRules(figure.dataType, figure.indoor);
   for (let i = 0; i < raw.length; i += 2) {
     const value = raw.readInt16LE(i);
     if (value !== -32768 && !(zeroIsInvalid && value === 0)) { min = Math.min(min, value / divisor); max = Math.max(max, value / divisor); validCount++; }
