@@ -450,9 +450,9 @@ async function exportAll() {
   try {
     const r = await api.exportZip(buildRequests(), { coordMode: coordMode.value });
     if (r.count < r.requested) {
-      ElMessage.warning(`已导出 ${r.count} 张(${r.requested} 张中还有未绘制的)`);
+      ElMessage.warning(`已准备 ${r.count} 张，等待保存确认（还有未绘制的图片）`);
     } else {
-      ElMessage.success(`已导出 ${r.count} 张对比图`);
+      ElMessage.info(`已准备 ${r.count} 张对比图，请选择 ZIP 保存位置`);
     }
     const a = document.createElement('a');
     a.href = r.url;

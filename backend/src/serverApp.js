@@ -25,7 +25,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   const cache = createCache({ ...runtime, sourcesStore });
   const supervisor = createProcessSupervisor({ stateDir: path.join(paths.dataDir, 'processes') });
   const environment = createMatlabEnvironment({ paths, supervisor, settingsStore });
-  const runner = createMatlabRunner({ ...runtime, supervisor });
+  const runner = createMatlabRunner({ ...runtime, supervisor, cache });
   const jobs = createJobQueue({ ...runtime, ...runner, cache, supervisor });
   const analysis = createAnalysisService({ store: sourcesStore });
   const exporter = createExporter(runtime);
@@ -75,6 +75,7 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
       if (host !== '127.0.0.1') return Promise.reject(new Error('仅允许绑定本机回环地址'));
       if (server) return Promise.reject(new Error('服务已经启动'));
       await supervisor.initialize();
+      if (!supervisor.getBlockedReason()) require('./outputPaths').recoverOutputLeases({ jobs: jobs.list(), dataDir: paths.dataDir, jobsDir: paths.jobsDir });
       return new Promise((resolve, reject) => {
         server = app.listen(port, host, () => { origin = `http://${host}:${server.address().port}`; resolve({ origin }); });
         server.once('error', reject);

@@ -21,7 +21,9 @@ function createZip(figures) {
   }
   const done = new Promise((resolve, reject) => {
     output.on('close', resolve);
+    output.on('error', reject);
     archive.on('error', reject);
+    archive.on('warning', reject);
   });
   archive.finalize();
   return { zipId, zipFile, done };
@@ -30,4 +32,4 @@ function createZip(figures) {
 return { createZip };
 }
 const { lazyService } = require('./lazyService');
-module.exports = lazyService(() => createExporter(require('./config')), { createExporter });
+module.exports = lazyService(() => createExporter({ EXPORT_DIR: require('./config').EXPORT_DIR }), { createExporter });

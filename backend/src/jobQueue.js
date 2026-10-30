@@ -58,7 +58,7 @@ function createJobQueue({ config, JOBS_DIR, runMatlabJob, cache, supervisor, job
         },
         (index, message) => { const f = pending[index]; if (!f) throw problem('图片回报无效', 'JOB_FIGURE_INVALID'); f.status = 'failed'; f.error = String(message); persist(job); },
         (index, axes) => { if (pending[index]) pending[index].axes = axes; },
-        { signal: controller.signal, timeoutMs: job.settingsSnapshot.jobTimeoutMinutes * 60000, settingsSnapshot: job.settingsSnapshot });
+        { signal: controller.signal, timeoutMs: job.settingsSnapshot.jobTimeoutMinutes * 60000, settingsSnapshot: job.settingsSnapshot, onRunPrepared: () => persist(job) });
       if (!result || result.cleanupConfirmed !== true) throw problem('MATLAB 所属进程退出尚未确认', 'PROCESS_CLEANUP_UNCONFIRMED');
       if (result.status !== 'done') throw Object.assign(problem(result.error || result.stderr || `任务已${result.status}`, 'MATLAB_RUN_FAILED'), { runResult: result });
       for (const f of pending) if (f.status === 'pending') { f.status = 'failed'; f.error = 'MATLAB 未返回本图完成结果'; }
@@ -111,4 +111,4 @@ function createJobQueue({ config, JOBS_DIR, runMatlabJob, cache, supervisor, job
     hasActive: () => !!active || queue.some(id => jobs.get(id)?.status === 'queued'), getBlockedReason: blockedReason };
 }
 const { lazyService } = require('./lazyService');
-module.exports = lazyService(() => createJobQueue({ ...require('./config'), runMatlabJob: require('./matlabRunner').runMatlabJob, cache: require('./cache') }), { createJobQueue });
+module.exports = lazyService(() => { const runtime = require('./config'); return createJobQueue({ config: runtime.config, JOBS_DIR: runtime.JOBS_DIR, runMatlabJob: require('./matlabRunner').runMatlabJob, cache: require('./cache') }); }, { createJobQueue });

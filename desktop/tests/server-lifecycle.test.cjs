@@ -35,7 +35,7 @@ test('显式目录的两个服务隔离、随机本机端口、认证、真实�
       jobsDir: path.join(dataDir, 'jobs'), exportDir: path.join(dataDir, 'exports'), cacheDir: path.join(dataDir, 'cache') };
   }
   try {
-    const settingsStore = { get: () => ({ matlabExe: '', maxConcurrentJobs: 1 }) };
+    const settingsStore = { get: () => ({ matlabExe: '', maxConcurrentJobs: 1, outputMode: 'source' }) };
     for (const id of ['a', 'b']) servers.push(createServer({ paths: makePaths(id), settingsStore, sessionSecret: secret, sessionCookieName: name }));
     const [{ origin: a }, { origin: b }] = await Promise.all(servers.map(s => s.listen({ host: '127.0.0.1', port: 0 })));
     assert.notEqual(a, b);

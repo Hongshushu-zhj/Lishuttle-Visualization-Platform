@@ -6,4 +6,5 @@ export const desktopBridge = Object.freeze({
   selectDirectory: () => native?.selectDirectory() || Promise.resolve(null),
   selectPreferences: () => native?.selectPreferences() || Promise.resolve(null),
   openLogs: () => native?.openLogs() || Promise.reject(new Error('请在桌面应用中打开日志目录')),
+  onDownloadResult: callback => native?.onDownloadResult(callback) || (() => {}),
 });

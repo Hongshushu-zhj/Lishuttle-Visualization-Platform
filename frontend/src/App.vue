@@ -58,6 +58,7 @@ import JobHistory from './components/JobHistory.vue';
 import { desktop } from './desktopState';
 import { desktopBridge } from './desktopBridge';
 import { environmentLabel } from './desktopModel.mjs';
+import { ElMessage } from 'element-plus';
 
 const currentView = ref('plot');
 const history = ref(null);
@@ -66,6 +67,10 @@ const analysisOpened = ref(false);
 watch(currentView, view => { if (view === 'analysis') analysisOpened.value = true; });
 
 let poll, polling = false;
+const stopDownloadNotifications = desktopBridge.onDownloadResult(({ state, filename }) => {
+  if (state === 'completed') ElMessage.success(`文件已保存：${filename}`);
+  else ElMessage.error('文件保存失败，请检查目标目录和磁盘空间后重试。');
+});
 async function retry() {
   await loadSources();
   try { await desktop.load(); desktop.state.appInfo = await desktopBridge.getAppInfo(); }
@@ -79,7 +84,7 @@ onMounted(async () => {
     try { await desktop.pollCheck(); } catch { /* settings shows retryable error */ } finally { polling = false; }
   }, 1000);
 });
-onUnmounted(() => clearInterval(poll));
+onUnmounted(() => { clearInterval(poll); stopDownloadNotifications(); });
 </script>
 
 <style scoped>

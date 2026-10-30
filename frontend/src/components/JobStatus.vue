@@ -8,7 +8,12 @@
     </div>
     <el-progress :percentage="jobPercent(job)" :status="job.status === 'done' ? 'success' : ['failed','timed_out','partial','interrupted'].includes(job.status) ? 'exception' : ''" />
     <p v-if="job.error" class="muted">{{ job.error }} <span v-if="job.errorDetails?.code">（{{ job.errorDetails.code }}）</span></p>
-    <details v-if="details"><summary>逐图结果与任务记录</summary><p class="muted">任务 {{ job.id }} · {{ job.createdAt }}</p><div v-for="f in job.figures" :key="f.key">{{ f.sourceName }} · {{ f.taskName }} · {{ f.dataType }} · {{ f.layerLabel }}：{{ f.status }} {{ f.error || '' }}</div></details>
+    <details v-if="details"><summary>逐图结果与任务记录</summary><p class="muted">任务 {{ job.id }} · {{ job.createdAt }}</p>
+      <el-button v-if="job.done" size="small" @click="exportHistory">导出成功图片 ZIP</el-button>
+      <div v-for="f in job.figures" :key="f.key">{{ f.sourceName }} · {{ f.taskName }} · {{ f.dataType }} · {{ f.layerLabel }}：{{ f.status }} {{ f.error || '' }}
+        <template v-if="['done','cached'].includes(f.status)"><a :href="api.imageUrl(f, true)">下载 PNG</a> <el-button link @click="act(() => api.openJobResults(job.id, f.key))">打开结果位置</el-button></template>
+      </div>
+    </details>
     <p v-if="error" style="color: #c00000">{{ error }}</p>
   </div>
 </template>
@@ -22,5 +27,6 @@ const emit = defineEmits(['update', 'retry']); const busy = ref(false), error = 
 async function act(fn) { busy.value = true; error.value = ''; try { await fn(); } catch (e) { error.value = e.message; } finally { busy.value = false; } }
 function cancel() { return act(async () => emit('update', await api.cancelJob(props.job.id))); }
 function retry() { if (!ensurePlotReady()) return; return act(async () => emit('retry', await api.retryJob(props.job.id))); }
+function exportHistory() { return act(async () => { const result = await api.exportJob(props.job.id); const link = document.createElement('a'); link.href = result.url; link.click(); }); }
 </script>
 <style scoped>.job-status { padding: 12px; margin: 12px 0; border: 1px solid #dcdfe6; border-radius: 6px; } .job-status__header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; } details { line-height: 1.8; font-size: 13px; }</style>

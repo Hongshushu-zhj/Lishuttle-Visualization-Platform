@@ -92,7 +92,7 @@ async function main() {
     if (process.platform === 'win32') {
       const folder = await openResultsFolder(source.id, 'RSRP', (exe, args, opts) => {
         assert.equal(exe, 'explorer.exe'); assert.equal(opts.shell, false);
-        assert.deepEqual(args, [path.join(root, '路损结果图', '任务B', 'RSRP')]);
+        assert.deepEqual(args, [path.join(cache.resultsDir(source.id, '任务B'), 'RSRP')]);
         const child = new EventEmitter(); child.unref = () => {};
         process.nextTick(() => child.emit('spawn')); return child;
       }, '任务B');
@@ -105,7 +105,7 @@ async function main() {
     const modern = cache.pngPath(source.id, 'RSRP', 'F1', '', '0');
     fs.mkdirSync(path.dirname(modern), { recursive: true });
     fs.writeFileSync(modern, 'legacy'); cache.markCached(source.id, 'RSRP', 'F1', dem, '', null, '0');
-    const oldDir = path.join(root, '路损结果图', 'RSRP'); fs.mkdirSync(oldDir);
+    const oldDir = path.join(root, '路损结果图', 'RSRP'); fs.mkdirSync(oldDir, { recursive: true });
     const old = path.join(oldDir, `${source.name}_RSRP_1层_绝对坐标.png`);
     fs.renameSync(modern, old); fs.renameSync(modern + '.meta.json', old + '.meta.json');
     assert.equal(cache.migrateSource(source.id), 1);

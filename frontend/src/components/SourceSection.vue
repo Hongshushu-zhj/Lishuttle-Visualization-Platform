@@ -358,9 +358,9 @@ async function exportAll() {
       { coordMode: props.coordMode }
     );
     if (r.count < r.requested) {
-      ElMessage.warning(`已导出 ${r.count} 张(${r.requested} 张中还有 ${r.requested - r.count} 张未绘图)`);
+      ElMessage.warning(`已准备 ${r.count} 张，等待保存确认（还有 ${r.requested - r.count} 张未绘图）`);
     } else {
-      ElMessage.success(`已导出 ${r.count} 张图片`);
+      ElMessage.info(`已准备 ${r.count} 张图片，请选择 ZIP 保存位置`);
     }
     triggerDownload(r.url);
   } catch (e) {

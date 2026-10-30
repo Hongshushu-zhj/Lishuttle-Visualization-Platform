@@ -48,6 +48,8 @@ export const plot = (requests, dryRun = false, options = {}) =>
   req('/plot', { method: 'POST', body: JSON.stringify({ requests, dryRun, options }) });
 export const getJob = (id) => req(`/jobs/${id}`);
 export const listJobs = () => req('/jobs');
+export const exportJob = id => req(`/jobs/${encodeURIComponent(id)}/export`, { method: 'POST' });
+export const openJobResults = (id, key) => req(`/jobs/${encodeURIComponent(id)}/open-results`, { method: 'POST', body: JSON.stringify({ key }) });
 export const cancelJob = id => req(`/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
 export const retryJob = id => req(`/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' });
 export const analyzeResults = (request) => req('/analysis', { method: 'POST', body: JSON.stringify(request) });

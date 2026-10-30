@@ -6,6 +6,7 @@ const path = require('path');
 const express = require('express');
 const store = require('../src/sourcesStore');
 const queue = require('../src/jobQueue');
+const cache = require('../src/cache');
 const { scanSource } = require('../src/scanner');
 const { gridSize, wallSegments, rasterPreview } = require('../src/rasterPreview');
 
@@ -41,10 +42,10 @@ async function main() {
     assert.deepEqual(result.body.overlays.walls, [[0, 0, 2, 2]]);
     assert.equal((await post('/api/preview', { ...req, taskId: '../bad' })).status, 400);
     assert.equal((await post('/api/preview', { ...req, layer: 'F9' })).status, 404);
-    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    const png = 'data:image/png;base64,' + require('../tests/fixtures/png.cjs').png().toString('base64');
     const saved = await post('/api/preview/save', { ...req, range: [-100, -50], png });
     assert.equal(saved.status, 200); assert.ok(fs.existsSync(saved.body.path));
-    assert.ok(saved.body.path.startsWith(path.join(root, '路损结果图', '中文任务', 'RSRP')));
+    assert.ok(saved.body.path.startsWith(path.join(cache.resultsDir(source.id, '中文任务'), 'RSRP')));
     assert.ok(saved.body.path.includes('交互预览_色标-100至-50'));
     assert.equal((await post('/api/preview/save', { ...req, range: [1, -1], png })).status, 400);
     assert.equal((await post('/api/preview/save', { ...req, range: [-100, -50], png: 'data:image/png;base64,bad' })).status, 400);

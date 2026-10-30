@@ -24,7 +24,7 @@ function createProcessSupervisor({ stateDir }) {
     else throw new Error('上次所属进程是否退出尚未确认，已阻止新绘图；请保留日志并检查恢复状态');
   }
   const isBusy = () => !!active || !!blocked;
-  function run({ executable, args = [], cwd, signal, timeoutMs = 180000, env: additions = {}, onStdout = () => {}, onStderr = () => {} }) {
+  function run({ executable, args = [], cwd, signal, timeoutMs = 180000, env: additions = {}, onStdout = () => {}, onStderr = () => {}, onStarted = () => {} }) {
     if (isBusy()) return Promise.reject(new Error(blocked || 'MATLAB 槽位正在运行或被占用'));
     if (signal?.aborted) return Promise.resolve({ status: 'cancelled', cleanupConfirmed: true, stdout: '', stderr: '', exitCode: null });
     active = {};
@@ -38,6 +38,7 @@ function createProcessSupervisor({ stateDir }) {
       if (signal?.aborted) return { status: 'cancelled', cleanupConfirmed: true, stdout: '', stderr: '', exitCode: null };
       const runDir = fs.mkdtempSync(path.join(stateDir, 'run-'));
       const resultFile = path.join(runDir, 'result.json'), requestFile = path.join(runDir, 'request.json');
+      onStarted({ runDir, resultFile });
       const pipeName = 'antenna-' + crypto.randomUUID();
       const env = { ...process.env, ...additions };
       for (const key of Object.keys(env)) if (['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'MATLABPATH'].includes(key.toUpperCase())) delete env[key];
@@ -84,7 +85,7 @@ function createProcessSupervisor({ stateDir }) {
           });
         });
       } finally { clearTimeout(timer); clearTimeout(grace); signal?.removeEventListener('abort', abort); socket?.destroy(); server.close(); }
-    })().catch(error => { if (fs.existsSync(markerFile)) blocked = error.message; throw error; }).finally(() => { active = null; });
+    })().catch(error => { const unconfirmed = fs.existsSync(markerFile); if (unconfirmed) blocked = error.message; error.runResult ||= { status: 'failed', cleanupConfirmed: !unconfirmed }; throw error; }).finally(() => { active = null; });
     return lastRun;
   }
   return { run, isBusy, recover, initialize: async () => { try { await recover(); } catch (error) { blocked = error.message; } }, waitForIdle: () => lastRun, cancelAll: () => active?.stop?.('cancelled'), getBlockedReason: () => blocked };
