@@ -2,19 +2,13 @@
 
 读取仿真结果，调用 MATLAB 生成室内/室外覆盖图，支持多高度层、结果对比和图片下载。
 
-## Windows 桌面候选版
+## Windows 桌面正式版 1.0.0
 
-Desktop V1 候选为 **1.0.0-rc.3**，等待最终独立设备验收，尚未确认为正式 1.0.0。
+Desktop V1 **1.0.0** 按用户对 RC3 验收范围的确认重新构建，交付目录为 `release/交付-1.0.0`。普通使用者双击 `AntennaDraw-Setup-1.0.0-x64.exe` 安装，从桌面 AntennaDraw 启动，在首次引导中选择并检测本机 MATLAB；无需 Node.js、npm、源码或命令行。
 
-普通使用者运行 `release/stable/AntennaDraw-Setup-1.0.0-rc.3-x64.exe` 安装，从桌面快捷方式启动。在首次引导中选择并检测本机 MATLAB；无需 Node.js、npm、源码或命令行。安装包未签名，交付前核对 SHA-256。
+安装包为 Windows x64 当前用户安装，未签名；SHA-256 见交付目录 `SHA256SUMS.txt`。稳定与 Dev 渠道独立，开发包放在交付目录的“开发测试”子目录。采用手动覆盖升级，没有自动更新、账号或云上传。
 
-设置中可选择输出目录；任务记录支持取消、失败重试和历史下载。稳定/开发渠道使用独立数据根，可同时安装；开发包位于 `release/dev/`。诊断导出先预览本地路径。采用手动升级，没有自动更新、账号或云上传。
-
-详细材料：`docs/desktop-v1/install-guide.md`、`external-final-guide.md`、`acceptance-report.md`、`release-checklist.md`。旧 alpha.2 的外机报告不替代 RC3 最终验收。
-
-最终本地交付目录为 `release/交付-RC3`，包含 stable 安装包、开发测试包、SHA256SUMS.txt、说明、手工验收表和第三方许可。先阅读 `00-先读.txt`；不要使用中间构建或依赖 `.desktop-test-data` 内的测试安装位置。
-
-2026-11-01 外机补充：最终 RC3 两轮技术自检、R2024b 样图和 PNG/ZIP 内容复核通过；用户确认关闭重开与离线本地 RSRP 正常。完整界面/异常手工验收仍待补，见 `docs/desktop-v1/external-rc3-review-2026-11-01.md` 和 `rc3-remaining-acceptance.md`。安装包及冻结交付目录不变。
+使用说明见 `docs/desktop-v1/install-guide.md`，正式构建、实际验证范围及已知限制见 `formal-release-1.0.0.md`、`acceptance-report.md`、`release-notes-1.0.0.md`。RC3 原始外机记录与 `release/交付-RC3` 保留；没有逐项回传的手工项目不补写为实测通过。
 
 下列为源码浏览器模式的开发部署说明，桌面安装使用者不需要执行这些步骤。
 
