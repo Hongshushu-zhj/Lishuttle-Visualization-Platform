@@ -3,6 +3,11 @@ node_modules/
 .npm-cache/
 release/
 test-results/
+playwright-report/
+blob-report/
+coverage/
+.nyc_output/
+*.lcov
 .desktop-test-data/
 .desktop-build/
 frontend/dist/
@@ -20,6 +25,24 @@ backend/data/*
 
 # ===== 文档产物 =====
 /docs/
+
+# ===== 本地测试、验收与调试工具 =====
+/backend/tests/
+/desktop/tests/*
+# 构建脚本用它生成应用内演示数据，必须保留在源码仓库。
+!/desktop/tests/fixtures.cjs
+/frontend/scripts/*.test.mjs
+/playwright.config.cjs
+/scripts/baseline.cjs
+/scripts/create-test-bundle.cjs
+/scripts/desktop-smoke.cjs
+/scripts/verify-*.cjs
+/backend/scripts/dev-check.js
+/backend/scripts/indoor-align-check.js
+/backend/scripts/render-check.js
+/backend/scripts/verify-*
+/backend/scripts/verify_*.m
+/matlab/verify_*.m
 
 # ===== 本机配置 =====
 # config.json 含本机 MATLAB 安装路径,不入库;

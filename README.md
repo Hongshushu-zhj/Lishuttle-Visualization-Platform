@@ -8,7 +8,7 @@ Desktop V1 **1.0.0** 按用户对 RC3 验收范围的确认重新构建，交付
 
 安装包为 Windows x64 当前用户安装，未签名；SHA-256 见交付目录 `SHA256SUMS.txt`。稳定与 Dev 渠道独立，开发包放在交付目录的“开发测试”子目录。采用手动覆盖升级，没有自动更新、账号或云上传。
 
-使用说明见 `docs/desktop-v1/install-guide.md`，正式构建、实际验证范围及已知限制见 `formal-release-1.0.0.md`、`acceptance-report.md`、`release-notes-1.0.0.md`。RC3 原始外机记录与 `release/交付-RC3` 保留；没有逐项回传的手工项目不补写为实测通过。
+使用说明、验收报告、版本说明与第三方许可随正式交付提供。本地详细文档位于 `docs/desktop-v1/`，与测试、验收材料一起由 Git 忽略并保留在本机；源码仓库保留运行和打包需要的文件，以及本 README。RC3 原始外机记录与 `release/交付-RC3` 本地保留。
 
 下列为源码浏览器模式的开发部署说明，桌面安装使用者不需要执行这些步骤。
 
@@ -173,7 +173,7 @@ node backend/server.js
 
 开发前端时另开终端执行 `npm --prefix frontend run dev`，默认地址为 `http://127.0.0.1:5173`，后端需同时运行。自定义后端端口时，还需同步 `frontend/vite.config.js` 的代理配置。
 
-修改绘图、扫描或缓存逻辑后，可运行专项检查（使用临时数据）：
+修改绘图、扫描或缓存逻辑后，可使用本机保留的测试材料运行下列专项检查（使用临时数据）。这些脚本与 `test:*` 命令依赖的测试文件按仓库忽略规则本地保留，全新拉取的源码不包含它们：
 
 ```powershell
 node backend/scripts/verify-cache-compatibility.js
