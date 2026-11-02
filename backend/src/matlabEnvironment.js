@@ -21,7 +21,7 @@ function discoverMatlab({ roots } = {}) {
   }
   return [...found].sort().reverse();
 }
-function createMatlabEnvironment({ paths, supervisor, settingsStore }) {
+function createMatlabEnvironment({ paths, supervisor, settingsStore, onRecovered = () => {} }) {
   const records = new Map(); let active, pending = Promise.resolve(), passed = null;
   const stateFile = path.join(paths.dataDir, 'environment.json');
   try { passed = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { /* absent/corrupt status never means ready */ }
@@ -33,7 +33,7 @@ function createMatlabEnvironment({ paths, supervisor, settingsStore }) {
   }
   const getDetection = id => { const record = records.get(id); if (!record) throw invalid('检测记录不存在', 'DETECTION_NOT_FOUND'); return structuredClone(record); };
   function getState(executable = settingsStore?.get().matlabExe || '') {
-    if (supervisor.getBlockedReason?.()) return { status: 'failed', executable, error: { code: 'PROCESS_CLEANUP_UNCONFIRMED', message: supervisor.getBlockedReason(), retryable: false } };
+    if (supervisor.getBlockedReason?.() && !active) return { status: 'failed', executable, error: { code: 'PROCESS_CLEANUP_UNCONFIRMED', message: supervisor.getBlockedReason(), retryable: true } };
     if (!executable) return { status: 'not_configured', executable: '' };
     if (active?.record.executable === executable) return structuredClone(active.record);
     const latest = [...records.values()].reverse().find(record => record.executable === executable);
@@ -46,11 +46,12 @@ function createMatlabEnvironment({ paths, supervisor, settingsStore }) {
   }
   function startDetection({ executable }) {
     executable = validateMatlabExecutable(executable);
-    if (active || supervisor.isBusy()) throw invalid('MATLAB 正在运行或检测，稍后重试', 'MATLAB_BUSY');
+    if (active || (supervisor.isBusy() && !supervisor.getBlockedReason?.())) throw invalid('MATLAB 正在运行或检测，稍后重试', 'MATLAB_BUSY');
     const record = { id: crypto.randomUUID(), status: 'running', executable, checks: {}, startedAt: new Date().toISOString() };
     const controller = new AbortController(); active = { record, controller }; records.set(record.id, record);
     while (records.size > 20) records.delete(records.keys().next().value);
     pending = Promise.resolve().then(async () => {
+      if (supervisor.getBlockedReason?.()) { await supervisor.recover(); onRecovered(); }
       const directory = path.join(paths.dataDir, 'environment-checks'); fs.mkdirSync(directory, { recursive: true });
       const output = fs.mkdtempSync(path.join(directory, 'check-'));
       const code = `addpath('${matlabString(paths.matlabDir)}'); check_environment('${matlabString(output)}');`;

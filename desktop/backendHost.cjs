@@ -25,6 +25,16 @@ function startBackend({ entry, channel, paths, sessionSecret, sessionCookieName,
       if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.pathname !== '/') { fail(new Error('服务返回了非本机地址')); return; }
       clearTimeout(timer); ready = true;
       resolve({ origin: url.origin, child,
+        async forceStop() {
+          if (stopped) return;
+          // Only our own utilityProcess is stopped. Closing its lifetime port
+          // also disconnects the guardian pipe; recovery evidence stays on disk.
+          await new Promise(done => {
+            const limit = setTimeout(done, 5000);
+            child.once('exit', () => { clearTimeout(limit); done(); });
+            child.kill(); lifetime.port1.close();
+          });
+        },
         getActivity() {
           return new Promise((done, failActivity) => {
             if (stopped) return done({ active: false });

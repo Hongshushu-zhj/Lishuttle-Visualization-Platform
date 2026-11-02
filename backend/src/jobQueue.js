@@ -33,7 +33,13 @@ function createJobQueue({ config, JOBS_DIR, runMatlabJob, cache, supervisor, job
     jobs.set(job.id, job);
   }
   const get = id => jobs.has(id) ? structuredClone(jobs.get(id)) : null;
-  const blockedReason = () => blocked || supervisor?.getBlockedReason?.() || '';
+  const processBlockedMessage = 'MATLAB 所属进程退出尚未确认，已停止新绘图';
+  const blockedReason = () => {
+    if (blocked === processBlockedMessage && supervisor && !supervisor.getBlockedReason?.() && !supervisor.isBusy()) {
+      blocked = ''; if (active?.unconfirmed) active = null;
+    }
+    return blocked || supervisor?.getBlockedReason?.() || '';
+  };
   function schedule() { if (scheduled) return; scheduled = true; queueMicrotask(() => { scheduled = false; pump(); }); }
   function pump() {
     if (active || stopping || blockedReason()) return;
@@ -67,7 +73,7 @@ function createJobQueue({ config, JOBS_DIR, runMatlabJob, cache, supervisor, job
     } catch (error) {
       result ||= error.runResult;
       const unconfirmed = error.code === 'PROCESS_CLEANUP_UNCONFIRMED' || result?.cleanupConfirmed === false || !!supervisor?.getBlockedReason?.();
-      if (unconfirmed) { blocked = 'MATLAB 所属进程退出尚未确认，已停止新绘图'; active.unconfirmed = true; }
+      if (unconfirmed) { blocked = processBlockedMessage; active.unconfirmed = true; }
       const end = !unconfirmed && ['cancelled', 'timed_out', 'interrupted'].includes(result?.status) ? result.status : 'failed';
       for (const f of job.figures) if (f.status === 'pending') { f.status = end; f.error = error.message; }
       count(job); job.status = end === 'failed' && job.done && !unconfirmed ? 'partial' : end;
@@ -101,14 +107,16 @@ function createJobQueue({ config, JOBS_DIR, runMatlabJob, cache, supervisor, job
   }
   async function shutdown() {
     stopping = true;
+    try {
     let failure;
     for (const job of jobs.values()) if (['queued', 'running', 'cancelling'].includes(job.status)) { try { cancel(job.id); } catch (error) { failure ||= error; } }
     if (active?.promise) await active.promise;
     if (blockedReason()) throw problem(blockedReason(), 'PROCESS_CLEANUP_UNCONFIRMED');
     if (failure) throw failure;
+    } catch (error) { stopping = false; throw error; }
   }
   return { create, get, cancel, waitForIdle, shutdown, list: () => [...jobs.values()].map(job => get(job.id)).sort((a,b) => b.createdAt.localeCompare(a.createdAt)),
-    hasActive: () => !!active || queue.some(id => jobs.get(id)?.status === 'queued'), getBlockedReason: blockedReason };
+    hasActive: () => (!!active && !active.unconfirmed) || queue.some(id => jobs.get(id)?.status === 'queued'), getBlockedReason: blockedReason };
 }
 const { lazyService } = require('./lazyService');
 module.exports = lazyService(() => { const runtime = require('./config'); return createJobQueue({ config: runtime.config, JOBS_DIR: runtime.JOBS_DIR, runMatlabJob: require('./matlabRunner').runMatlabJob, cache: require('./cache') }); }, { createJobQueue });

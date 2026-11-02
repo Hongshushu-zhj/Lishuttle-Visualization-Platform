@@ -7,6 +7,13 @@ using System.Runtime.InteropServices;
 using System.ComponentModel;
 using System.Collections.Generic;
 using Microsoft.Win32.SafeHandles;
+using System.Reflection;
+
+[assembly: AssemblyTitle("AntennaDraw Windows Process Host")]
+[assembly: AssemblyDescription("Owns and cleans up only AntennaDraw MATLAB job processes")]
+[assembly: AssemblyProduct("AntennaDraw")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
 
 // Windows 11: private job, no breakaway; associate at CreateProcess time.
 // References: Microsoft Learn Job Objects, UpdateProcThreadAttribute,
@@ -38,7 +45,7 @@ public static class AntennaProcessHost {
     }
     [StructLayout(LayoutKind.Sequential)] struct StartupEx { public Startup Startup; public IntPtr Attributes; }
     [StructLayout(LayoutKind.Sequential)] struct ProcessInfo { public IntPtr Process, Thread; public uint Pid, Tid; }
-    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int cls, ref ExtendedLimit info, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int cls, out Accounting info, uint size, IntPtr returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool TerminateJobObject(IntPtr job, uint code);
@@ -46,7 +53,6 @@ public static class AntennaProcessHost {
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr previous, IntPtr returned);
     [DllImport("kernel32.dll")] static extern void DeleteProcThreadAttributeList(IntPtr list);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool CreateProcessW(string executable, StringBuilder command, IntPtr processAttributes, IntPtr threadAttributes, bool inherit, uint flags, IntPtr environment, string cwd, ref StartupEx startup, out ProcessInfo process);
-    [DllImport("kernel32.dll", SetLastError = true)] static extern uint ResumeThread(IntPtr thread);
     [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
     [StructLayout(LayoutKind.Sequential)] struct SecurityAttributes { public int Size; public IntPtr Descriptor; public int Inherit; }
@@ -86,12 +92,16 @@ public static class AntennaProcessHost {
         IntPtr job = IntPtr.Zero, list = IntPtr.Zero, jobPointer = IntPtr.Zero, handlePointer = IntPtr.Zero;
         IntPtr outRead = IntPtr.Zero, outWrite = IntPtr.Zero, errRead = IntPtr.Zero, errWrite = IntPtr.Zero, input = IntPtr.Zero;
         bool initialized = false, cleaned = true; ProcessInfo process = new ProcessInfo();
-        string status = "failed", error = ""; int exitCode = -1;
+        string status = "failed", error = "", jobName = Environment.GetEnvironmentVariable("ANTENNA_JOB_NAME"); int exitCode = -1;
         NamedPipeClientStream pipe = null;
         try {
             pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous); pipe.Connect(10000);
             NamedPipeClientStream connection = pipe;
             StreamWriter writer = new StreamWriter(connection, new UTF8Encoding(false));
+            string hostToken = Environment.GetEnvironmentVariable("ANTENNA_HOST_TOKEN");
+            if (String.IsNullOrEmpty(hostToken)) throw new Exception("Missing host authentication token");
+            writer.WriteLine("H:" + hostToken); writer.Flush();
+            Environment.SetEnvironmentVariable("ANTENNA_HOST_TOKEN", null);
             Thread reader = new Thread(delegate() {
                 try {
                     string line = new StreamReader(connection, Encoding.UTF8).ReadLine();
@@ -99,7 +109,12 @@ public static class AntennaProcessHost {
                     Interlocked.CompareExchange(ref stopReason, reason, null);
                 } catch { Interlocked.CompareExchange(ref stopReason, "interrupted", null); }
             }); reader.IsBackground = true; reader.Start();
-            job = CreateJobObjectW(IntPtr.Zero, null); Check(job != IntPtr.Zero);
+            if (String.IsNullOrEmpty(jobName) || !System.Text.RegularExpressions.Regex.IsMatch(jobName, @"^Local\\AntennaDraw-[0-9a-f-]{36}$")) throw new Exception("Invalid job identity");
+            job = CreateJobObjectW(IntPtr.Zero, jobName); Check(job != IntPtr.Zero);
+            if (Marshal.GetLastWin32Error() == 183) {
+                CloseHandle(job); job = IntPtr.Zero;
+                throw new Exception("Job identity already exists");
+            }
             ExtendedLimit limit = new ExtendedLimit(); limit.Basic.Flags = 0x2000; // KILL_ON_JOB_CLOSE; no breakaway flags.
             Check(SetInformationJobObject(job, 9, ref limit, (uint)Marshal.SizeOf(typeof(ExtendedLimit))));
             IntPtr size = IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero, 2, 0, ref size);
@@ -123,12 +138,13 @@ public static class AntennaProcessHost {
             Check(UpdateProcThreadAttribute(list, 0, new IntPtr(0x20002), handlePointer, new IntPtr(handles.Count * IntPtr.Size), IntPtr.Zero, IntPtr.Zero));
             if (stopReason == null) {
                 StringBuilder command = new StringBuilder(Quote(executable)); foreach (string arg in args) command.Append(" ").Append(Quote(arg));
-                Check(CreateProcessW(executable, command, IntPtr.Zero, IntPtr.Zero, true, 0x08080004, IntPtr.Zero, cwd, ref startup, out process));
+                // JOB_LIST attaches the child before its initial thread runs.
+                // No suspended process or thread-resume API is needed.
+                Check(CreateProcessW(executable, command, IntPtr.Zero, IntPtr.Zero, true, 0x08080000, IntPtr.Zero, cwd, ref startup, out process));
                 cleaned = false;
                 CloseHandle(outWrite); outWrite = IntPtr.Zero; CloseHandle(errWrite); errWrite = IntPtr.Zero;
                 Thread outPump = Pump(outRead, "O", writer); outRead = IntPtr.Zero;
                 Thread errPump = Pump(errRead, "E", writer); errRead = IntPtr.Zero;
-                if (ResumeThread(process.Thread) == UInt32.MaxValue) throw new Win32Exception(Marshal.GetLastWin32Error());
                 bool terminated = false; DateTime stopAt = DateTime.MaxValue;
                 while (Active(job) != 0) {
                     if (stopReason != null && !terminated) { Check(TerminateJobObject(job, 1)); terminated = true; stopAt = DateTime.UtcNow.AddSeconds(10); }
@@ -159,7 +175,7 @@ public static class AntennaProcessHost {
             if (job != IntPtr.Zero) CloseHandle(job);
             if (pipe != null) pipe.Dispose();
         }
-        string result = "{\"status\":\"" + status + "\",\"exitCode\":" + exitCode + ",\"pid\":" + process.Pid + ",\"cleanupConfirmed\":" + (cleaned ? "true" : "false") + ",\"error\":\"" + Escape(error) + "\"}";
+        string result = "{\"schemaVersion\":2,\"jobName\":\"" + Escape(jobName ?? "") + "\",\"status\":\"" + status + "\",\"exitCode\":" + exitCode + ",\"pid\":" + process.Pid + ",\"cleanupConfirmed\":" + (cleaned ? "true" : "false") + ",\"error\":\"" + Escape(error) + "\"}";
         File.WriteAllText(resultFile + ".tmp", result, new UTF8Encoding(false)); File.Move(resultFile + ".tmp", resultFile);
         return cleaned ? 0 : 2;
     }

@@ -92,7 +92,7 @@ function acquireOutputLock(file) {
 }
 function recoverOutputLeases({ jobs, dataDir, jobsDir }) {
   for (const job of jobs) {
-    if (job.status !== 'interrupted') continue;
+    if (job.status !== 'interrupted' && !(job.status === 'failed' && job.errorDetails?.code === 'PROCESS_CLEANUP_UNCONFIRMED')) continue;
     const leases = job.figures.map(f => f.outputLease).filter(Boolean);
     if (!leases.length) continue;
     const completion = path.join(jobsDir, job.id, 'output-cleanup.json');

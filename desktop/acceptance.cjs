@@ -1,4 +1,4 @@
-// 两渠道的安装技术自检；不修改日常设置、数据源或已有结果。
+// dev 测试包的安装技术自检；不修改日常设置、数据源或已有结果。
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');

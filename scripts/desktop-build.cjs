@@ -22,8 +22,7 @@ async function main() {
   fs.rmSync(demo, { recursive:true,force:true }); fs.mkdirSync(demo, { recursive: true });
   require('../desktop/tests/fixtures.cjs').createDemo(demo);
   const native = path.join(scratch,'native');fs.mkdirSync(native,{recursive:true});
-  const host = await require('../backend/src/windowsProcessHost').ensureWindowsProcessHost(path.join(scratch,'native-cache'));
-  fs.copyFileSync(host,path.join(native,'WindowsProcessHost.exe'));
+  const host = await require('../backend/src/windowsProcessHost').buildWindowsProcessHost({ outputDir: native });
   require('./third-party-notices.cjs').createNotices(root,path.join(scratch,'third-party'));
   const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
   if (revision.status !== 0) throw new Error('无法记录构建 revision');
@@ -31,7 +30,7 @@ async function main() {
   if (status.status !== 0) throw new Error('无法记录工作区状态');
   const demoManifest = {};function collect(directory){for(const name of fs.readdirSync(directory)){const file=path.join(directory,name);if(fs.statSync(file).isDirectory())collect(file);else demoManifest[path.relative(demo,file).replace(/\\/g,'/')]=require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');}}collect(demo);
   fs.writeFileSync(path.join(scratch, 'build-info.json'), JSON.stringify({ version: target.version,
-    revision: revision.stdout.trim(), workingTreeDirty: !!status.stdout.trim(), builtAt: new Date().toISOString(), channel: target.channel, appId:target.appId, unsigned:true, demoManifest,
+    revision: revision.stdout.trim(), workingTreeDirty: !!status.stdout.trim(), builtAt: new Date().toISOString(), channel: target.channel, appId:target.appId, unsigned:true, demoManifest, nativeProcessHost: host.manifest,
     electron: require('electron/package.json').version, node: process.version }, null, 2));
   await require('electron-builder').build({ config: { extends: path.join(root, 'electron-builder.yml'), appId:target.appId,productName:target.productName,artifactName:target.artifactName,
     directories:{output:path.join(root,target.output)},extraMetadata:{version:target.version,desktopChannel:target.channel,productName:target.productName},

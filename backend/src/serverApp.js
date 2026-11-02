@@ -23,8 +23,9 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   const runtime = createConfig({ paths, settingsStore });
   const sourcesStore = createSourcesStore(runtime.SOURCES_FILE);
   const cache = createCache({ ...runtime, sourcesStore });
-  const supervisor = createProcessSupervisor({ stateDir: path.join(paths.dataDir, 'processes') });
-  const environment = createMatlabEnvironment({ paths, supervisor, settingsStore });
+  const supervisor = createProcessSupervisor({ stateDir: path.join(paths.dataDir, 'processes'), packaged: paths.isPackaged === true });
+  const recoverLeases = () => require('./outputPaths').recoverOutputLeases({ jobs: jobs.list(), dataDir: paths.dataDir, jobsDir: paths.jobsDir });
+  const environment = createMatlabEnvironment({ paths, supervisor, settingsStore, onRecovered: recoverLeases });
   const runner = createMatlabRunner({ ...runtime, supervisor, cache });
   const jobs = createJobQueue({ ...runtime, ...runner, cache, supervisor });
   const analysis = createAnalysisService({ store: sourcesStore });
@@ -78,14 +79,14 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
   app.use((error, req, res, next) => { logger('API_ERROR', { code:error.code || 'REQUEST_FAILED', message:error.message }); res.status(error.status || 500).json({ error:error.message, code:error.code || 'REQUEST_FAILED' }); });
   return {
     app, jobs, paths, settingsStore, sourcesStore, environment, supervisor,
-    getActivity: () => ({ active: jobs.hasActive() || environment.isActive() || supervisor.isBusy(), jobs: jobs.list().filter(job => ['queued', 'running', 'cancelling'].includes(job.status)).length,
+    getActivity: () => ({ active: jobs.hasActive() || environment.isActive() || supervisor.isRunning(), jobs: jobs.list().filter(job => ['queued', 'running', 'cancelling'].includes(job.status)).length,
       detecting: environment.isActive(), blocked: jobs.getBlockedReason() }),
     async listen({ host = '127.0.0.1', port = 0 } = {}) {
       if (host !== '127.0.0.1') return Promise.reject(new Error('仅允许绑定本机回环地址'));
       if (server) return Promise.reject(new Error('服务已经启动'));
       await supervisor.initialize();
       try { cleanup(); } catch (error) { logger('CLEANUP_FAILED', { message:error.message }); }
-      if (!supervisor.getBlockedReason()) require('./outputPaths').recoverOutputLeases({ jobs: jobs.list(), dataDir: paths.dataDir, jobsDir: paths.jobsDir });
+      if (!supervisor.getBlockedReason()) recoverLeases();
       server = await require('./loopbackServer').listenLoopback(app, { host,port });
       origin = `http://${host}:${server.address().port}`; return { origin };
     },
@@ -95,15 +96,17 @@ function createServer({ paths, settingsStore, sessionSecret, sessionCookieName, 
       closing = (async () => {
         const results = await Promise.allSettled([jobs.shutdown(), environment.cancelAndWait()]);
         await supervisor.waitForIdle().catch(() => {});
+        if (supervisor.getBlockedReason()) { await supervisor.recover(); recoverLeases(); }
         const failure = results.find(result => result.status === 'rejected');
-        if (failure) throw failure.reason;
+        if (failure?.reason.code === 'PROCESS_CLEANUP_UNCONFIRMED' && !supervisor.isBusy()) await jobs.shutdown();
+        else if (failure) throw failure.reason;
         if (supervisor.isBusy()) throw new Error('MATLAB 所属进程退出尚未确认，请保留应用并查看日志');
         await new Promise((resolve, reject) => {
         if (!server || !server.listening) return resolve();
         server.close(error => error ? reject(error) : resolve());
         server.closeAllConnections();
         });
-      })().catch(error => { closing = undefined; throw error; });
+      })().catch(error => { closing = undefined; closingRequested = false; throw error; });
       return closing;
     },
   };

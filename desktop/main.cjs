@@ -38,8 +38,13 @@ else {
       }
       await backend?.stop(); allowQuit = true; app.quit();
     })().catch(async error => {
-      shuttingDown = false;
-      await dialog.showMessageBox(window, { type: 'error', title: '退出未完成', message: error.message, buttons: ['留在应用'] });
+      diagnostics?.log('APP_SHUTDOWN_FAILED', { code: error.code, message: error.message });
+      const result = await dialog.showMessageBox(window, { type: 'warning', title: '退出清理未完成', message: error.message,
+        detail: '可以保留恢复记录并退出。程序只关闭自己的本地服务，不按名称强制关闭其他 MATLAB；下次启动会重新核验所属进程，确认前不会开始新绘图。',
+        buttons: ['留在应用', '退出并保留恢复记录'], defaultId: 0, cancelId: 0 });
+      if (result.response === 1) {
+        await backend?.forceStop(); allowQuit = true; app.quit();
+      } else shuttingDown = false;
     });
   });
   app.on('window-all-closed', () => app.quit());
@@ -68,8 +73,9 @@ async function start() {
   const appSession = session.fromPartition(`persist:antenna-${channel}`);
   configureSessionSecurity(appSession);
   await appSession.cookies.set({ url: origin, name: cookieName, value: secret, httpOnly: true, sameSite: 'strict', path: '/' });
+  Menu.setApplicationMenu(null);
   window = makeWindow(appSession);
-  {
+  if (dev) {
     const menu = Menu.buildFromTemplate([{ label: '安装自检', submenu: [{ id: 'desktop-acceptance', label: '运行安装自检…',
       click: async item => {
         if (acceptanceActive) return;

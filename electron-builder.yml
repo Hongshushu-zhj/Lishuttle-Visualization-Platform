@@ -14,7 +14,7 @@ extraResources:
       - package.json
       - package-lock.json
       - src/**
-      - '!src/native/*.cs'
+      - '!src/native/**'
   - from: backend/node_modules
     to: backend/node_modules
     filter:
@@ -31,6 +31,9 @@ extraResources:
     to: build-info.json
   - from: .desktop-build/native
     to: backend/src/native
+    filter:
+      - WindowsProcessHost.exe
+      - WindowsProcessHost.manifest.json
   - from: .desktop-build/third-party
     to: third-party
 win:
