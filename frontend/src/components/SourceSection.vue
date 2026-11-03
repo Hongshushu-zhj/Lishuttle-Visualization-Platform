@@ -99,8 +99,9 @@
       </div>
 
       <!-- 进度 -->
+      <JobStatus :job="currentJob" @update="currentJob = $event" @retry="resumeJob" />
       <el-progress
-        v-if="plotting || justFinished"
+        v-if="!currentJob && (plotting || justFinished)"
         :percentage="percent"
         :status="progressStatus"
         :stroke-width="14"
@@ -149,6 +150,9 @@ import {
 } from '@element-plus/icons-vue';
 import * as api from '../api';
 import FigureCard from './FigureCard.vue';
+import { ensurePlotReady } from '../appState';
+import JobStatus from './JobStatus.vue';
+import { watchJob } from '../jobWatcher.mjs';
 
 const props = defineProps({
   source: { type: Object, required: true },
@@ -175,11 +179,14 @@ const openingFolder = ref(false);
 const justFinished = ref(false);
 const jobError = ref('');
 const progress = ref({ done: 0, total: 0, status: '' });
+const currentJob = ref(null);
 const startedAt = ref(0);
 const elapsed = ref(0);
 let timer = null;
 let elapsedTimer = null;
 let cacheRequest = 0;
+let retryBase = [];
+function mergeRetry(figures) { const byKey = new Map(figures.map(f => [f.key, f])); return [...retryBase.map(f => byKey.get(f.key) || f), ...figures.filter(f => !retryBase.some(old => old.key === f.key))]; }
 
 const currentType = computed(() => allTypes.value.find((t) => t.key === dataType.value) || null);
 const currentLayers = computed(() => (currentType.value ? currentType.value.layers : []));
@@ -246,6 +253,9 @@ async function loadCached() {
 }
 
 async function startPlot() {
+  if (!ensurePlotReady()) return;
+  currentJob.value = null;
+  retryBase = [];
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;
@@ -277,38 +287,28 @@ async function startPlot() {
   }
 }
 
-function pollJob(jobId) {
-  return new Promise((resolve) => {
-    timer = setInterval(async () => {
-      try {
-        const st = await api.getJob(jobId);
-        progress.value = { done: st.done, total: st.total, status: st.status };
-        figures.value = st.figures;
-        if (st.status === 'done' || st.status === 'failed') {
-          clearInterval(timer);
-          timer = null;
-          if (st.status === 'failed') {
-            jobError.value = st.error || 'MATLAB 绘图失败';
-          }
-          version.value = Date.now(); // 刷新浏览器图片缓存
-          if (st.status === 'done') {
-            finishSuccess(false);
-          } else {
-            plotting.value = false;
-            clearTimers();
-          }
-          resolve();
-        }
-      } catch (e) {
-        clearInterval(timer);
-        timer = null;
-        jobError.value = e.message;
-        plotting.value = false;
-        clearTimers();
-        resolve();
-      }
-    }, 1500);
-  });
+async function pollJob(jobId) {
+  timer?.stop();
+  const watcher = watchJob({ read: () => api.getJob(jobId), update(st) {
+    currentJob.value = st;
+    progress.value = { done: st.done, total: st.total, status: st.status };
+    figures.value = mergeRetry(st.figures);
+  } });
+  timer = watcher;
+  try {
+    const result = await watcher.finished;
+    if (!result || timer !== watcher) return;
+    version.value = Date.now();
+    if (result.status === 'done') finishSuccess(false);
+    else { jobError.value = result.error || '任务未全部完成，请从任务记录查看逐图结果'; plotting.value = false; clearTimers(); }
+  } catch (error) {
+    if (timer !== watcher) return;
+    jobError.value = error.message + '；后台任务会继续，可从任务记录重新查看'; plotting.value = false; clearTimers();
+  }
+}
+async function resumeJob(job) {
+  clearTimers(); retryBase = figures.value; currentJob.value = job; figures.value = mergeRetry(job.figures); plotting.value = true; jobError.value = '';
+  await pollJob(job.id);
 }
 
 function finishSuccess(allCached) {
@@ -326,7 +326,7 @@ function finishSuccess(allCached) {
 
 function clearTimers() {
   if (timer) {
-    clearInterval(timer);
+    timer?.stop();
     timer = null;
   }
   if (elapsedTimer) {
@@ -342,9 +342,9 @@ async function exportAll() {
       { coordMode: props.coordMode }
     );
     if (r.count < r.requested) {
-      ElMessage.warning(`已导出 ${r.count} 张(${r.requested} 张中还有 ${r.requested - r.count} 张未绘图)`);
+      ElMessage.warning(`已准备 ${r.count} 张，已发起 ZIP 下载（还有 ${r.requested - r.count} 张未绘图）`);
     } else {
-      ElMessage.success(`已导出 ${r.count} 张图片`);
+      ElMessage.info(`已准备 ${r.count} 张图片，已发起 ZIP 下载，请查看浏览器下载记录`);
     }
     triggerDownload(r.url);
   } catch (e) {

@@ -4,9 +4,12 @@
       <div class="app-header__left">
         <el-icon size="22" style="color: #1f6feb"><Picture /></el-icon>
         <span class="app-header__title">天线覆盖绘图平台</span>
-        <span class="muted">基于 MATLAB 仿真结果自动出图</span>
+        <el-tag size="small" type="info">Web {{ app.state.appInfo?.version || '' }}</el-tag>
       </div>
       <div class="app-header__right" style="display: flex; align-items: center; gap: 12px">
+        <el-button link :type="app.isReady() ? 'success' : 'warning'" @click="app.state.open = true">{{ environmentLabel(app.state.environment) }}</el-button>
+        <el-button @click="app.state.open = true">应用设置</el-button>
+        <el-button @click="history.open()">任务记录</el-button>
         <GlobalColorRanges />
         <el-radio-group v-model="currentView" size="default">
           <el-radio-button value="plot">
@@ -29,29 +32,59 @@
         :closable="false"
         show-icon
         style="margin: 12px 20px 0"
-        title="无法连接后端服务"
-        :description="state.backendError + ' —— 请确认已通过 启动平台.bat 或 node server.js 启动后端(默认端口 8000)'"
-      />
+        title="本地服务连接中断"
+        :description="state.backendError + '。请重试；仍不可用时重新打开应用，并在设置中查看日志。'"
+      ><el-button size="small" @click="retry">重试连接</el-button><el-button size="small" @click="app.state.open = true">设置与诊断</el-button></el-alert>
+      <el-alert v-if="app.state.loaded && app.state.onboarding.warnings?.length" :title="app.state.onboarding.warnings.join('；')" type="warning" :closable="false" />
+      <el-alert v-if="preferencesError" :title="'服务端偏好加载失败：' + preferencesError" description="可以继续浏览和分析。保存偏好前请重试连接。" type="warning" :closable="false"><el-button size="small" @click="retry">重试偏好加载</el-button></el-alert>
       <PlotView v-show="currentView === 'plot'" />
       <CompareView v-show="currentView === 'compare'" />
       <AnalysisView v-if="analysisOpened" v-show="currentView === 'analysis'" />
     </el-main>
   </el-container>
+  <AppSettings />
+  <FirstRunWizard />
+  <JobHistory ref="history" />
 </template>
 
 <script setup>
-import { onMounted, ref, watch, defineAsyncComponent } from 'vue';
+import { onMounted, onUnmounted, ref, watch, defineAsyncComponent } from 'vue';
 import { state, loadSources } from './store';
 import PlotView from './views/PlotView.vue';
 import GlobalColorRanges from './components/GlobalColorRanges.vue';
 import CompareView from './views/CompareView.vue';
+import AppSettings from './components/AppSettings.vue';
+import FirstRunWizard from './components/FirstRunWizard.vue';
+import JobHistory from './components/JobHistory.vue';
+import { app } from './appState';
+import * as api from './api';
+import { initializePreferences } from './preferences';
+import { environmentLabel } from './appModel.mjs';
+import { ElMessage } from 'element-plus';
 
 const currentView = ref('plot');
+const history = ref(null);
 const AnalysisView = defineAsyncComponent(() => import('./views/AnalysisView.vue'));
 const analysisOpened = ref(false);
 watch(currentView, view => { if (view === 'analysis') analysisOpened.value = true; });
 
-onMounted(loadSources);
+let poll, polling = false;
+const preferencesError = ref('');
+async function retry() {
+  await loadSources();
+  try { await initializePreferences({ force: true }); preferencesError.value = ''; } catch (error) { preferencesError.value = error.message; }
+  try { await app.load(); app.state.appInfo = await api.getAppInfo(); }
+  catch (error) { state.backendOk = false; state.backendError = error.message; }
+}
+onMounted(async () => {
+  await retry();
+  poll = setInterval(async () => {
+    if (polling || !app.state.checking) return;
+    polling = true;
+    try { await app.pollCheck(); } catch { /* settings shows retryable error */ } finally { polling = false; }
+  }, 1000);
+});
+onUnmounted(() => { clearInterval(poll); });
 </script>
 
 <style scoped>
@@ -73,5 +106,9 @@ onMounted(loadSources);
 .app-header__title {
   font-size: 17px;
   font-weight: 700;
+}
+@media (max-width: 1320px) {
+  .app-header { height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+  .app-header__right { flex-wrap: wrap; }
 }
 </style>

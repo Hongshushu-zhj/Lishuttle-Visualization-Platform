@@ -2,12 +2,12 @@
   <div class="page">
     <el-row :gutter="16">
       <!-- 左侧:数据源管理 -->
-      <el-col :span="5">
+      <el-col :xs="24" :sm="8" :lg="5">
         <el-card shadow="never" class="side-card">
           <template #header>
             <div class="side-head">
               <span>数据源</span>
-              <el-button type="primary" size="small" :icon="FolderAdd" @click="picker.open()">
+              <el-button type="primary" size="small" :icon="FolderAdd" @click="openPicker()">
                 添加
               </el-button>
             </div>
@@ -36,11 +36,12 @@
               <el-tag v-if="group.key === 'indoor'" size="small" type="warning" effect="plain">室内</el-tag>
             </div>
             <div class="muted src-item__meta">
-              {{ s.tasks.filter((task) => task.indoor === (group.key === 'indoor')).length }} 个任务
+              {{ (s.tasks || []).filter((task) => task.indoor === (group.key === 'indoor')).length }} 个任务
               <span v-if="s.offline" style="color: #f56c6c"> · 目录已丢失</span>
             </div>
             </button>
             <div class="src-item__ops">
+              <el-button v-if="s.offline" link size="small" @click="openPicker(s.id)">重新定位</el-button>
               <el-tooltip content="重新识别数据" placement="top">
                 <el-button link size="small" :icon="Refresh" @click="doRefresh(s)" />
               </el-tooltip>
@@ -59,13 +60,13 @@
             <li>在室内/室外分组中选择数据源,右侧切换到对应结果。</li>
             <li>选择「任务」「数据类型」与「高度层/楼层」,点击「开始绘图」。</li>
             <li>图片按高度层依次展示,可单张下载、也可整包导出。</li>
-            <li>结果图统一保存在各自结果文件夹下的「路损结果图」目录;仿真重跑后自动重新绘图。</li>
+            <li>结果按应用设置保存。更改位置不移动已有结果，可从「任务记录」下载或打开原位置；仿真重跑后重新绘图。</li>
           </ol>
         </el-card>
       </el-col>
 
       <!-- 右侧:当前选择的数据源 -->
-      <el-col :span="19">
+      <el-col :xs="24" :sm="16" :lg="19">
         <div v-if="selectedSource" class="display-bar">
           <CoordModeSelect v-model="coordMode" />
         </div>
@@ -100,12 +101,15 @@
 import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { FolderAdd, Folder, Refresh, Delete } from '@element-plus/icons-vue';
-import { state, addSource, removeSource, refreshSource } from '../store';
+import { state, addSource, removeSource, refreshSource, loadSources } from '../store';
+import { relocateSource } from '../api';
 import FolderPicker from '../components/FolderPicker.vue';
 import TaskSourceSection from '../components/TaskSourceSection.vue';
 import CoordModeSelect from '../components/CoordModeSelect.vue';
 
 const picker = ref(null);
+const relocating = ref('');
+function openPicker(id = '') { relocating.value = id; picker.value.open(); }
 const coordMode = ref('abs');
 const selectedSourceId = ref('');
 const selectedGroup = ref('outdoor');
@@ -116,8 +120,9 @@ function selectSource(source, group) {
 const refreshVersions = ref({});
 const selectedSource = computed(() => state.sources.find((s) => s.id === selectedSourceId.value));
 const sourceGroups = computed(() => [
-  { key: 'indoor', label: '室内', sources: state.sources.filter((s) => s.tasks?.some((task) => task.indoor)) },
-  { key: 'outdoor', label: '室外', sources: state.sources.filter((s) => s.tasks?.some((task) => !task.indoor)) },
+  { key: 'indoor', label: '室内', sources: state.sources.filter((s) => !s.offline && s.tasks?.some((task) => task.indoor)) },
+  { key: 'outdoor', label: '室外', sources: state.sources.filter((s) => !s.offline && s.tasks?.some((task) => !task.indoor)) },
+  { key: 'offline', label: '离线待定位', sources: state.sources.filter((s) => s.offline) },
 ]);
 
 watch(() => state.sources.map((s) => s.id), (ids) => {
@@ -126,6 +131,12 @@ watch(() => state.sources.map((s) => s.id), (ids) => {
 
 async function onPick(path) {
   try {
+    if (relocating.value) {
+      const source = await relocateSource(relocating.value, path); await loadSources();
+      refreshVersions.value[source.id] = (refreshVersions.value[source.id] || 0) + 1;
+      selectSource(source, source.tasks[0]?.indoor ? 'indoor' : 'outdoor'); relocating.value = '';
+      ElMessage.success('目录已重新定位并刷新'); return;
+    }
     const s = await addSource(path);
     selectSource(s, s.tasks[0]?.indoor ? 'indoor' : 'outdoor');
     ElMessage.success(`已添加「${s.name}」,识别到 ${s.tasks.length} 个任务`);
