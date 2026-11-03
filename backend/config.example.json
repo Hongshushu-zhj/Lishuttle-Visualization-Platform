@@ -1,9 +1,9 @@
 {
-  "_说明": "部署时复制本文件为 config.json，再修改本机路径。说明字段仅供阅读；保持标准 JSON 格式，不要添加 // 或 /* */ 注释。修改后重启平台生效。",
-  "_port说明": "后端端口，默认 8000。修改时还需同步启动平台.bat、停止平台.bat 中的 PORT；开发模式还需同步 frontend/vite.config.js 的代理端口。",
+  "_说明": "可复制为 config.json 配置 Web 端口。首次升级时 MATLAB 等旧设置仅迁入一次；以后从网页应用设置修改。保持标准 JSON 格式。",
+  "_port说明": "本地后端端口，默认 8000。启动停止脚本与 Vite 代理统一读取此处；修改后重新启动。",
   "port": 8000,
-  "_matlabExe说明": "本机 MATLAB 可执行文件的完整路径，指向 bin\\matlab.exe。Windows 路径中的反斜杠在 JSON 中需写成双反斜杠，也可使用正斜杠。需要可用的 MATLAB 许可。",
-  "matlabExe": "D:\\Matlab\\R2022a\\bin\\matlab.exe",
-  "_maxConcurrentJobs说明": "同时运行的 MATLAB 绘图进程数，设置为正整数，建议保持 1；提高会增加内存和许可占用。一次进程可批量绘制多张图。",
+  "_matlabExe说明": "首次初始化可留空，进入网页后选择并检测本机 MATLAB。已有 data/settings.json 时此字段不会覆盖网页设置。",
+  "matlabExe": "",
+  "_maxConcurrentJobs说明": "MATLAB 并发固定为 1；旧配置大于 1 时迁移会明确调整。",
   "maxConcurrentJobs": 1
 }
