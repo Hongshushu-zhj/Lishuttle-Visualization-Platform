@@ -50,3 +50,4 @@ backend/src/native/*.manifest.json
 /docs/superpowers/plans/*
 !/docs/superpowers/specs/2026-11-03-web-desktop-alignment-design.md
 !/docs/superpowers/plans/2026-11-03-web-desktop-alignment.md
+!/docs/superpowers/plans/2026-11-03-web-desktop-alignment-acceptance.md

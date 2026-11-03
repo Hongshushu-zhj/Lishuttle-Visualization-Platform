@@ -21,7 +21,7 @@
 - 桌面功能参考：`antenna-draw-desktop`，HEAD `97c4cc3`，README 标识修复版 1.0.1。
 - 桌面参考文档：`docs/desktop-v1/release-notes-1.0.0.md`、`hotfix-1.0.1.md`、`baseline.md`。
 - 两者为独立 Git 工作区，工作区父目录不是 Git 仓库。
-- 桌面验收记录用于识别已有能力及故障修复，不能代替迁回 Web 后的实际验收。本轮未运行构建、MATLAB 或功能回归。
+- 桌面验收记录用于识别已有能力及故障修复，不能代替迁回 Web 后的实际验收。方案梳理阶段未运行构建、MATLAB 或功能回归；实施后的实际结果见同日验收记录。
 
 核心业务已有很高的一致性：`scanner.js`、`plotTypes.js`、`rasterData.js`、`rasterPreview.js`、`renderOptions.js`、`analysisStats.js`、`analysisWorker.js`、`analysisModel.mjs`、`rasterRenderer.js` 及七个 `showrsrp_*.m` 内容相同。
 
