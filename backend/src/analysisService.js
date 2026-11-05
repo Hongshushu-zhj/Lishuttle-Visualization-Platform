@@ -4,27 +4,37 @@ const { Worker } = require('worker_threads');
 const { scanSource } = require('./scanner');
 const { PLOT_TYPES } = require('./plotTypes');
 const { resolveRaster } = require('./rasterData');
-const store = require('./sourcesStore');
 
+function createAnalysisService({ store, workerFile = path.join(__dirname, 'analysisWorker.js'), WorkerType = Worker }) {
 const VERSION = 1;
 const MAX_ACTIVE = 2, MAX_QUEUE = 256, MAX_CACHE_BYTES = 32 * 1024 * 1024;
 let active = 0, cacheBytes = 0;
 const waiting = [], cache = new Map(), inFlight = new Map();
+const workers = new Map(), terminations = new Set();
+let stopping = false, closing;
 const invalid = message => Object.assign(new Error(message), { status: 400 });
+const closed = () => Object.assign(new Error('分析服务正在关闭，已停止统计'), { status: 503, code: 'APP_CLOSING' });
+
+function terminate(worker) {
+  const pending = worker.terminate();
+  terminations.add(pending);
+  pending.finally(() => { workers.delete(worker); terminations.delete(pending); }).catch(() => {});
+}
 
 function pump() {
-  while (active < MAX_ACTIVE && waiting.length) {
+  while (!stopping && active < MAX_ACTIVE && waiting.length) {
     const { figure, resolve, reject } = waiting.shift(); active++;
     let worker, settled = false;
     const finish = (error, result) => {
       if (settled) return;
       settled = true; active--;
-      if (worker) worker.terminate().catch(() => {});
+      if (worker) terminate(worker);
       error ? reject(error) : resolve(result);
       pump();
     };
     try {
-      worker = new Worker(path.join(__dirname, 'analysisWorker.js'), { workerData: figure });
+      worker = new WorkerType(workerFile, { workerData: figure });
+      workers.set(worker, finish);
       worker.once('message', value => finish(value.error ? new Error(value.error) : null, value.result));
       worker.once('error', finish);
       worker.once('exit', code => { if (!settled) finish(new Error(`统计线程退出 (${code})`)); });
@@ -40,6 +50,7 @@ function fingerprint(figure) {
 }
 
 async function statistics(figure) {
+  if (stopping) throw closed();
   const key = fingerprint(figure);
   if (cache.has(key)) {
     const item = cache.get(key); cache.delete(key); cache.set(key, item);
@@ -49,6 +60,7 @@ async function statistics(figure) {
   if (waiting.length >= MAX_QUEUE) throw new Error('统计队列已满，请稍后重试');
   const pending = new Promise((resolve, reject) => { waiting.push({ figure, resolve, reject }); pump(); })
     .then(result => {
+      if (stopping) throw closed();
       if (fingerprint(figure) !== key) throw new Error('源文件在分析过程中发生变化，请重新分析');
       const bytes = Buffer.byteLength(JSON.stringify(result));
       if (bytes <= MAX_CACHE_BYTES) {
@@ -64,6 +76,7 @@ async function statistics(figure) {
 }
 
 async function analyzeRequest(body) {
+  if (stopping) throw closed();
   const { sourceId, taskId, dataType, layers } = body || {};
   if (typeof sourceId !== 'string' || typeof taskId !== 'string' || !taskId || !Object.hasOwn(PLOT_TYPES, dataType)) throw invalid('请选择有效的数据源、任务和指标');
   if (!Array.isArray(layers) || !layers.length || layers.length > 256 || layers.some(l => typeof l !== 'string' || !l)) throw invalid('请选择 1～256 个有效层');
@@ -91,4 +104,17 @@ async function analyzeRequest(body) {
     indoor: task.indoor, analyzedAt: new Date().toISOString(), rulesVersion: VERSION, layers: results };
 }
 
-module.exports = { analyzeRequest };
+function shutdown() {
+  if (closing) return closing;
+  stopping = true;
+  for (const request of waiting.splice(0)) request.reject(closed());
+  for (const finish of workers.values()) finish(closed());
+  closing = Promise.all([...terminations]).then(() => Promise.allSettled([...inFlight.values()])).then(() => {
+    cache.clear(); cacheBytes = 0;
+  });
+  return closing;
+}
+return { analyzeRequest, shutdown, hasActive: () => active > 0 || waiting.length > 0 || workers.size > 0 };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => createAnalysisService({ store: require('./sourcesStore') }), { createAnalysisService });

@@ -7,6 +7,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ElMessage } from 'element-plus';
 import * as echarts from 'echarts/core';
 import { BarChart, PieChart } from 'echarts/charts';
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent, GraphicComponent } from 'echarts/components';
@@ -30,6 +31,7 @@ function download() {
   if (!chart) return;
   const a = document.createElement('a'); a.href = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' });
   a.download = `${props.filename}_${props.title}.png`.replace(/[\\/:*?"<>|]/g, '_'); a.click();
+  ElMessage.info('已发起图表 PNG 下载，请查看浏览器下载记录');
 }
 onMounted(() => { observer = new ResizeObserver(render); observer.observe(host.value); render(); });
 watch(() => [props.option, props.subtitle, props.title, props.empty], render);

@@ -40,8 +40,8 @@ import { createRasterPainter, drawPreview } from '../rasterRenderer';
 import { activeColorRange, saveColorRange } from '../colorRanges';
 const props = defineProps({ fig: { type: Object, required: true }, compact: { type: Boolean, default: false } });
 const globalRange = computed(() => activeColorRange(props.fig.dataType));
-function applyGlobal() {
-  try { saveColorRange(props.fig.dataType, range.value); ElMessage.success(`已保存并应用至所有 ${props.fig.dataType} 结果预览`); }
+async function applyGlobal() {
+  try { await saveColorRange(props.fig.dataType, range.value); ElMessage.success(`已保存并应用至所有 ${props.fig.dataType} 结果预览`); }
   catch (e) { ElMessage.error(e.message); }
 }
 watch(globalRange, (value) => { if (value && preview.value) setRange(value); }, { deep: true });
@@ -88,7 +88,7 @@ async function save() {
   finally { saving.value = false; }
 }
 function download() {
-  try { const a = document.createElement('a'); a.href = image(); a.download = fileName(); a.click(); }
+  try { const a = document.createElement('a'); a.href = image(); a.download = fileName(); a.click(); ElMessage.info('已发起预览 PNG 下载，请查看浏览器下载记录'); }
   catch (e) { ElMessage.error(e.message); }
 }
 onMounted(async () => {

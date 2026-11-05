@@ -15,7 +15,7 @@
         <div class="section-head"><strong>分析区间配置 <small>{{ unit }}</small></strong><span class="muted">仅为分析起点，可根据业务标准调整</span></div>
         <div class="boundary-editor"><span>分界值</span><div v-for="(_, i) in draftBoundaries" :key="i" class="boundary"><el-input-number v-model="draftBoundaries[i]" :controls="false" :precision="2" :aria-label="`分界值 ${i + 1}`" /><el-button text type="danger" :disabled="draftBoundaries.length <= 1" :aria-label="`删除分界值 ${i + 1}`" @click="draftBoundaries.splice(i, 1)">×</el-button></div><el-button :disabled="draftBoundaries.length >= 20" @click="draftBoundaries.push((Number(draftBoundaries.at(-1)) || 0) + 10)">添加分界值</el-button></div>
         <div class="boundary-editor"><span>达标门限 ≥</span><el-input-number v-model="draftThreshold" :controls="false" :precision="2" aria-label="达标门限" /><span>{{ unit }}</span><el-button type="primary" plain @click="applyConfig">应用并保存配置</el-button><el-button @click="resetConfig">恢复默认</el-button></div>
-        <div class="muted">分界值须递增且不重复；区间左闭右开，自动包含两端超出值。配置保存在当前浏览器；修改后点击应用，无需重新读取 DEM。</div>
+        <div class="muted">分界值须递增且不重复；区间左闭右开，自动包含两端超出值。配置保存在本机服务，供当前服务的浏览器标签页共享；修改后点击应用，无需重新读取 DEM。</div>
         <el-alert v-if="draftDirty" type="info" title="区间或门限尚未应用，下方仍使用已应用配置。" :closable="false" />
       </template>
     </el-card>
@@ -113,14 +113,14 @@ watch(types, () => { if (!types.value.some(t => t.key === dataType.value)) dataT
 watch([sourceId, taskId, dataType], () => { selectedLayers.value = availableLayers.value.map(l => l.key); }, { immediate: true, flush: 'sync' });
 function loadDraft() { const c = config.value; draftBoundaries.value = c ? [...c.boundaries] : []; draftThreshold.value = c?.threshold ?? 0; }
 watch(dataType, loadDraft, { immediate: true });
-function applyConfig() {
+async function applyConfig() {
   const next = { boundaries: [...draftBoundaries.value], threshold: draftThreshold.value };
   if (!validateConfig(next)) return ElMessage.error('请输入 1～20 个递增、不重复的分界值及有效门限');
-  try { saveAnalysisConfig(dataType.value, next); ElMessage.success('分析配置已应用并保存'); }
+  try { await saveAnalysisConfig(dataType.value, next); ElMessage.success('分析配置已应用并保存'); }
   catch (e) { ElMessage.warning(e.message); }
 }
-function resetConfig() {
-  try { saveAnalysisConfig(dataType.value, analysisDefaults[dataType.value]); }
+async function resetConfig() {
+  try { await saveAnalysisConfig(dataType.value, analysisDefaults[dataType.value]); }
   catch (e) { ElMessage.warning(e.message); }
   loadDraft();
 }
@@ -215,6 +215,7 @@ function exportCsv(detail) {
   const a = document.createElement('a'); a.href = url;
   a.download = `${exportName.value}_${detail ? categorical.value ? '小区明细' : '分档明细' : '统计汇总'}.csv`.replace(/[\\/:*?"<>|]/g, '_'); a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  ElMessage.info('已发起 CSV 下载，请查看浏览器下载记录');
 }
 </script>
 

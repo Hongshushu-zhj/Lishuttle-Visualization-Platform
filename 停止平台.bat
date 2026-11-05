@@ -1,11 +1,15 @@
 @echo off
 setlocal
-set "PORT=8000"
-
-echo Stopping Antenna Coverage Plot Platform ...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT%" ^| findstr "LISTENING"') do (
-    echo Stopping process PID %%a ...
-    taskkill /F /PID %%a > nul 2>&1
+cd /d "%~dp0"
+where node >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] Node.js 20.19+ is required.
+  pause
+  exit /b 1
 )
-echo Service stopped.
-%SystemRoot%\System32\timeout.exe /t 2 /nobreak > nul
+node "%~dp0scripts\web-launcher.cjs" stop
+if errorlevel 1 (
+  echo [ERROR] Stop failed. No process was forcefully terminated.
+  pause
+  exit /b 1
+)

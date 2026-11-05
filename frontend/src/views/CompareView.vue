@@ -121,8 +121,9 @@
         :description="`已选 ${selectedSourceIds.length} 个任务,但它们的可绘图数据类型没有交集。请改选具有共同数据类型的任务。`"
       />
 
+      <JobStatus :job="currentJob" @update="currentJob = $event" @retry="resumeJob" />
       <el-progress
-        v-if="plotting || justFinished"
+        v-if="!currentJob && (plotting || justFinished)"
         :percentage="percent"
         :status="jobError ? 'exception' : (!plotting && justFinished ? 'success' : '')"
         :stroke-width="14"
@@ -206,10 +207,13 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Grid, MagicStick, Download, FolderAdd, Warning, Loading } from '@element-plus/icons-vue';
 import * as api from '../api';
+import { ensurePlotReady } from '../appState';
+import JobStatus from '../components/JobStatus.vue';
+import { watchJob } from '../jobWatcher.mjs';
 import { addSource, knownTypes, taskSources } from '../store';
 import FigureCard from '../components/FigureCard.vue';
 import FolderPicker from '../components/FolderPicker.vue';
@@ -229,6 +233,9 @@ const plotting = ref(false);
 const justFinished = ref(false);
 const jobError = ref('');
 const progress = ref({ done: 0, total: 0, status: '' });
+const currentJob = ref(null);
+let retryBase = [];
+function mergeRetry(figures) { const byKey = new Map(figures.map(f => [f.key, f])); return [...retryBase.map(f => byKey.get(f.key) || f), ...figures.filter(f => !retryBase.some(old => old.key === f.key))]; }
 const elapsed = ref(0);
 let timer = null;
 let elapsedTimer = null;
@@ -359,6 +366,9 @@ async function refreshGrid(dryRun = true) {
 }
 
 async function run() {
+  if (!ensurePlotReady()) return;
+  currentJob.value = null;
+  retryBase = [];
   jobError.value = '';
   justFinished.value = false;
   plotting.value = true;
@@ -382,31 +392,28 @@ async function run() {
   }
 }
 
-function pollJob(jobId) {
-  return new Promise((resolve) => {
-    timer = setInterval(async () => {
-      try {
-        const st = await api.getJob(jobId);
-        progress.value = { done: st.done, total: st.total, status: st.status };
-        cells.value = st.figures;
-        if (st.status === 'done' || st.status === 'failed') {
-          clearInterval(timer);
-          timer = null;
-          version.value = Date.now();
-          if (st.status === 'failed') jobError.value = st.error || 'MATLAB 绘图失败';
-          else finish(false);
-          resolve();
-        }
-      } catch (e) {
-        clearInterval(timer);
-        timer = null;
-        jobError.value = e.message;
-        plotting.value = false;
-        clearTimers();
-        resolve();
-      }
-    }, 1500);
-  });
+async function pollJob(jobId) {
+  timer?.stop();
+  const watcher = watchJob({ read: () => api.getJob(jobId), update(st) {
+    currentJob.value = st;
+    progress.value = { done: st.done, total: st.total, status: st.status };
+    cells.value = mergeRetry(st.figures);
+  } });
+  timer = watcher;
+  try {
+    const result = await watcher.finished;
+    if (!result || timer !== watcher) return;
+    version.value = Date.now();
+    if (result.status === 'done') finish(false);
+    else { jobError.value = result.error || '任务未全部完成，请从任务记录查看逐图结果'; plotting.value = false; clearTimers(); }
+  } catch (error) {
+    if (timer !== watcher) return;
+    jobError.value = error.message + '；后台任务会继续，可从任务记录重新查看'; plotting.value = false; clearTimers();
+  }
+}
+async function resumeJob(job) {
+  clearTimers(); retryBase = cells.value; currentJob.value = job; cells.value = mergeRetry(job.figures); plotting.value = true; jobError.value = '';
+  await pollJob(job.id);
 }
 
 function finish(allCached) {
@@ -421,7 +428,7 @@ function finish(allCached) {
 
 function clearTimers() {
   if (timer) {
-    clearInterval(timer);
+    timer?.stop();
     timer = null;
   }
   if (elapsedTimer) {
@@ -434,9 +441,9 @@ async function exportAll() {
   try {
     const r = await api.exportZip(buildRequests(), { coordMode: coordMode.value });
     if (r.count < r.requested) {
-      ElMessage.warning(`已导出 ${r.count} 张(${r.requested} 张中还有未绘制的)`);
+      ElMessage.warning(`已准备 ${r.count} 张，已发起 ZIP 下载（还有未绘制的图片）`);
     } else {
-      ElMessage.success(`已导出 ${r.count} 张对比图`);
+      ElMessage.info(`已准备 ${r.count} 张对比图，已发起 ZIP 下载，请查看浏览器下载记录`);
     }
     const a = document.createElement('a');
     a.href = r.url;
@@ -458,6 +465,8 @@ async function onPick(path) {
     ElMessageBox.alert(e.message, '添加失败', { type: 'error' });
   }
 }
+
+onUnmounted(clearTimers);
 
 // 数据源列表变化时,清掉已失效的选择
 watch(

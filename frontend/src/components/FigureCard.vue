@@ -54,6 +54,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { ZoomIn, Download } from '@element-plus/icons-vue';
 import { imageUrl } from '../api';
 import InteractiveFigure from './InteractiveFigure.vue';
@@ -86,6 +87,7 @@ function download() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  ElMessage.info('已发起 PNG 下载，请查看浏览器下载记录');
 }
 </script>
 

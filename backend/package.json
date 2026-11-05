@@ -5,8 +5,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test:analysis": "node scripts/verify-analysis.js"
+    "test": "node --test tests/*.test.cjs",
+    "test:analysis": "node scripts/verify-analysis.js",
+    "test:web": "node --test tests/web-*.test.cjs",
+    "verify:web-ui": "node scripts/verify-web-ui.js"
   },
+  "engines": { "node": ">=20.19.0" },
   "dependencies": {
     "archiver": "^7.0.1",
     "cors": "^2.8.5",

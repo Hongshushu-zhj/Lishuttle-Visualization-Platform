@@ -87,7 +87,16 @@ export function createRasterPainter(preview, useGpu = true) {
   };
 }
 
+export function rasterExtent(preview) {
+  const extent = preview.extent;
+  if (!extent || ![extent.left, extent.right, extent.bottom, extent.top].every(Number.isFinite) || extent.right <= extent.left || extent.top <= extent.bottom) {
+    throw new Error('预览栅格坐标范围无效，请刷新后重试');
+  }
+  return extent;
+}
+
 export function drawPreview(canvas, painter, preview, figure, range) {
+  const e = rasterExtent(preview);
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
@@ -103,7 +112,6 @@ export function drawPreview(canvas, painter, preview, figure, range) {
   ctx.font = '14px "Microsoft YaHei", sans-serif';
   ctx.fillText(`交互预览 · 色标 ${range[0]} ～ ${range[1]} ${preview.unit}${preview.sampled ? ' · 已采样' : ''}`, W / 2, 56);
   ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, width, height); ctx.clip();
-  const e = preview.extent;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(painter.paint(range), x(e.left), y(e.top), (e.right - e.left) * scale, (e.top - e.bottom) * scale);
   ctx.lineWidth = 1.2; ctx.strokeStyle = '#333';

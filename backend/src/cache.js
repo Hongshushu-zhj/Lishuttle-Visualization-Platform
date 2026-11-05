@@ -1,19 +1,20 @@
 const fs = require('fs');
 const path = require('path');
-const { CACHE_DIR } = require('./config');
 const { GROUND_LAYER } = require('./plotTypes');
-const sourcesStore = require('./sourcesStore');
 const { scanTask } = require('./scanner');
 const { createHash } = require('crypto');
+const { resolveOutput, prepareOutput } = require('./outputPaths');
+const { atomicWriteJson } = require('./jsonStore');
 
+function createCache({ CACHE_DIR, sourcesStore, config = { outputMode: 'source' } }) {
 const RESULTS_DIR_NAME = '路损结果图';
 
 function resultsDir(sourceId, taskId) {
   const source = sourcesStore.get(sourceId);
   if (!source) throw new Error(`数据源不存在: ${sourceId}`);
-  const root = path.resolve(source.path, RESULTS_DIR_NAME);
-  return taskId === undefined ? root : path.join(root, safeSegment(sourcesStore.task(sourceId, taskId).id));
+  return resolveOutput({ source, taskId: taskId === undefined ? undefined : sourcesStore.task(sourceId, taskId).id, settings: { ...config } }).directory;
 }
+function outputSettings() { return { ...config }; }
 
 function safeSegment(value) {
   if (!value || value === '.' || value === '..' || /[\\/\\\\:\x00]/.test(value)) {
@@ -24,7 +25,7 @@ function safeSegment(value) {
 
 // 渲染逻辑版本:绘图脚本或默认渲染参数变更时递增,
 // 已缓存的 PNG 会自动判定为过期并重新绘制(无需手动清缓存)。
-const RENDER_VERSION = 3;
+const RENDER_VERSION = 4;
 
 // 变体名追加在文件名里:ground.png / ground@u1a2b3c4d.png / ground@rel-ll.png
 // 变体用于区分"同一张图的不同渲染口径"(统一坐标范围、相对坐标显示等)。
@@ -53,11 +54,12 @@ function resultFileName(sourceId, dataType, layer, variant = '', taskId) {
   return name.replace(/[<>:"/\\\\|?*\x00-\x1f]/g, '_');
 }
 
-function pngPath(sourceId, dataType, layer, variant = '', taskId) {
+function outputFor(sourceId, dataType, layer, variant = '', taskId) {
   safeSegment(layerFileName(layer, variant));
   const task = sourcesStore.task(sourceId, taskId);
-  return path.join(resultsDir(sourceId, task.id), safeSegment(dataType), resultFileName(sourceId, dataType, layer, variant, task.id));
+  return resolveOutput({ source: sourcesStore.get(sourceId), taskId: task.id, dataType, fileName: resultFileName(sourceId, dataType, layer, variant, task.id), settings: { ...config } });
 }
+function pngPath(...args) { return outputFor(...args).file; }
 
 function metaPath(sourceId, dataType, layer, variant = '', taskId) {
   return pngPath(sourceId, dataType, layer, variant, taskId) + '.meta.json';
@@ -90,7 +92,7 @@ function isCached(sourceId, dataType, layer, demFile, variant = '', taskId) {
   const png = pngPath(sourceId, dataType, layer, variant, taskId);
   const meta = metaPath(sourceId, dataType, layer, variant, taskId);
   // 旧平台缓存按需复制到数据源目录,保留原文件以便回退。
-  if (!fs.existsSync(png)) migrateSource(sourceId);
+  if (!fs.existsSync(png) && config.outputMode === 'source') migrateSource(sourceId);
   if (!fs.existsSync(png) || !fs.existsSync(meta)) return false;
   try {
     const st = fs.statSync(demFile);
@@ -107,13 +109,19 @@ function isCached(sourceId, dataType, layer, demFile, variant = '', taskId) {
   }
 }
 
-function markCached(sourceId, dataType, layer, demFile, variant = '', axes = null, taskId) {
+function inputSignature(figure) {
+  const stat = fs.statSync(figure.demFile, { bigint: true });
+  return JSON.stringify([figure.demFile, String(stat.size), String(stat.mtimeNs), String(stat.ctimeNs), dependencySignature(figure.sourceId, figure.taskId)]);
+}
+function assertInputs(figure) { if (figure.inputSignature && figure.inputSignature !== inputSignature(figure)) throw Object.assign(new Error('绘图期间源文件发生变化，请重新绘图'), { code: 'INPUT_CHANGED' }); }
+function markCached(sourceId, dataType, layer, demFile, variant = '', axes = null, taskId, figure) {
+  if (figure) assertInputs(figure);
   const st = fs.statSync(demFile);
-  const meta = metaPath(sourceId, dataType, layer, variant, taskId);
+  const meta = figure?.pngFile ? figure.pngFile + '.meta.json' : metaPath(sourceId, dataType, layer, variant, taskId);
   fs.mkdirSync(path.dirname(meta), { recursive: true });
-  fs.writeFileSync(
+  atomicWriteJson(
     meta,
-    JSON.stringify({
+    {
       demPath: demFile,
       mtimeMs: st.mtimeMs,
       size: st.size,
@@ -122,7 +130,7 @@ function markCached(sourceId, dataType, layer, demFile, variant = '', axes = nul
       variant,
       axes, // 该图实际使用的坐标范围(便于事后核对渲染口径)
       at: new Date().toISOString(),
-    })
+    }, { backup: false }
   );
 }
 
@@ -134,7 +142,7 @@ function migrateSource(sourceId) {
   const tasks = Object.values(source.scan.tasks || {});
   for (const task of tasks) {
     for (const [dataType, type] of Object.entries(task.types)) {
-      const dirs = [path.join(resultsDir(sourceId), safeSegment(dataType)), path.join(CACHE_DIR, sourceId, dataType)];
+      const dirs = [...new Set([path.join(resultsDir(sourceId), safeSegment(dataType)), path.join(source.path, RESULTS_DIR_NAME, safeSegment(dataType)), path.join(CACHE_DIR, sourceId, dataType)])];
       for (const dir of dirs) {
         if (!fs.existsSync(dir)) continue;
         for (const file of fs.readdirSync(dir).filter((n) => /\.png$/i.test(n))) {
@@ -161,4 +169,7 @@ function migrateSource(sourceId) {
   return count;
 }
 
-module.exports = { RENDER_VERSION, RESULTS_DIR_NAME, resultsDir, resultFileName, migrateSource, pngPath, isCached, markCached, layerFileName, parseLayerFile };
+return { RENDER_VERSION, RESULTS_DIR_NAME, resultsDir, outputSettings, resultFileName, migrateSource, pngPath, outputFor, inputSignature, assertInputs, isCached, markCached, layerFileName, parseLayerFile };
+}
+const { lazyService } = require('./lazyService');
+module.exports = lazyService(() => { const runtime = require('./config'); return createCache({ config: runtime.config, CACHE_DIR: runtime.CACHE_DIR, sourcesStore: require('./sourcesStore') }); }, { createCache });

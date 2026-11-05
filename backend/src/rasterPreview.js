@@ -82,6 +82,9 @@ function rasterPreview(figure) {
   // 室内 X/Y 序列使用 right/top - 0.01,长度不足时 imagesc 按首尾中心插值。
   function centers(start, end, count) {
     const sequenceLength = Math.min(count, Math.max(1, Math.floor((end - 0.01 - start) / res) + 1));
+    // imagesc scalar X/Y places the first pixel center here; subsequent centers
+    // are one unit apart, even when the DEM resolution is not one (R2022a).
+    if (sequenceLength === 1) return [start - 0.5, start + count - 0.5];
     const last = start + (sequenceLength - 1) * res;
     const step = count > 1 ? (last - start) / (count - 1) : res;
     return [start - step / 2, last + step / 2];

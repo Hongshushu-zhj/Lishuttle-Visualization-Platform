@@ -49,6 +49,7 @@ showrsrp_indoor(rsrp, bounds, wall); assert(isequal(caxis, [-110 -40])); close a
 isolated = fullfile(fixture, 'isolated'); mkdir(isolated);
 copyfile(fullfile(scriptDir, 'plot_dispatch.m'), isolated);
 copyfile(fullfile(scriptDir, 'showrsrp_outdoor.m'), isolated);
+copyfile(fullfile(scriptDir, 'prepare_export_figure.m'), isolated);
 rmpath(scriptDir); addpath(isolated); clear plot_dispatch;
 fig = struct('preddir',pred,'dataType','SCR','layer','10m', ...
     'outFile',fullfile(fixture,'fallback.png'),'coordMode','rel-center', ...

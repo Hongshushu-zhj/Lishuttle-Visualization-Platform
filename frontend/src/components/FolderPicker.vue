@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="选择结果文件夹"
+    :title="mode === 'matlab' ? '选择 MATLAB 可执行文件' : '选择本机文件夹'"
     width="720px"
     :close-on-click-modal="false"
     @open="init"
@@ -41,16 +41,19 @@
           <span>{{ d.name }}</span>
           <el-icon class="picker-item__enter" color="#c0c4cc"><ArrowRight /></el-icon>
         </div>
+        <div v-for="file in files" :key="file.path" class="picker-item" :class="{ 'picker-item--selected': selectedFile === file.path }" @click="selectedFile = file.path" @dblclick="confirm">
+          <el-icon><Document /></el-icon><span>{{ file.name }}</span>
+        </div>
       </div>
     </el-form-item>
 
     <template #footer>
       <span class="muted" style="float: left; line-height: 32px">
-        提示:选定的是包含 pred 子目录的结果文件夹
+        {{ mode === 'matlab' ? '仅显示 matlab.exe，请进入 MATLAB 的 bin 目录选择。' : '数据源应选择包含 pred 子目录的结果文件夹。' }}
       </span>
       <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :disabled="!currentPath" @click="confirm">
-        选择此文件夹
+      <el-button type="primary" :disabled="loading || !(mode === 'matlab' ? selectedFile : currentPath)" @click="confirm">
+        {{ mode === 'matlab' ? '选择此文件' : '选择此文件夹' }}
       </el-button>
     </template>
   </el-dialog>
@@ -69,16 +72,15 @@ const parent = ref(null);
 const manualPath = ref('');
 const loading = ref(false);
 const error = ref('');
+const mode = ref('directory'), files = ref([]), selectedFile = ref('');
+let navigation = 0;
 
 async function init() {
   error.value = '';
   try {
     const r = await api.listDrives();
     drives.value = r.drives;
-    if (!currentPath.value) {
-      const home = drives.value[0] || 'C:\\';
-      await go(home);
-    }
+    await go(currentPath.value || drives.value[0] || 'C:\\');
   } catch (e) {
     error.value = e.message;
   }
@@ -86,18 +88,22 @@ async function init() {
 
 async function go(path) {
   if (!path) return;
+  const request = ++navigation;
   loading.value = true;
   error.value = '';
   try {
-    const r = await api.listDir(path);
+    const r = await (mode.value === 'matlab' ? api.listMatlabFiles(path) : api.listDir(path));
+    if (request !== navigation) return;
     currentPath.value = r.path;
     parent.value = r.parent;
     dirs.value = r.dirs;
     manualPath.value = r.path;
+    files.value = r.files || []; selectedFile.value = '';
   } catch (e) {
+    if (request !== navigation) return;
     error.value = e.message;
   } finally {
-    loading.value = false;
+    if (request === navigation) loading.value = false;
   }
 }
 
@@ -106,11 +112,13 @@ function goManual() {
 }
 
 function confirm() {
-  emit('select', currentPath.value);
+  const value = mode.value === 'matlab' ? selectedFile.value : currentPath.value;
+  if (!value || loading.value) return;
+  emit('select', value);
   visible.value = false;
 }
 
-defineExpose({ open: () => (visible.value = true) });
+defineExpose({ open: (options = {}) => { mode.value = options.mode || 'directory'; selectedFile.value = ''; files.value = []; visible.value = true; } });
 </script>
 
 <style scoped>
@@ -148,6 +156,7 @@ defineExpose({ open: () => (visible.value = true) });
 .picker-item:hover {
   background: #f0f7ff;
 }
+.picker-item--selected { background: #ecf5ff; outline: 1px solid var(--brand); }
 
 .picker-item__enter {
   margin-left: auto;

@@ -1,22 +1,17 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { config } = require('./config');
-const { EXPORT_DIR } = require('./config');
 const { scanSource } = require('./scanner');
-const sourcesStore = require('./sourcesStore');
-const jobQueue = require('./jobQueue');
-const cache = require('./cache');
-const exporter = require('./exporter');
 const { rasterPreview } = require('./rasterPreview');
 const { resolveRaster } = require('./rasterData');
-const { analyzeRequest } = require('./analysisService');
 const crypto = require('crypto');
-const { openResultsFolder } = require('./openResultsFolder');
 const { listDrives, listDir } = require('./fsBrowse');
 const { GROUND_LAYER, typeInfo, displayLabel, layerLabel } = require('./plotTypes');
 const { normalizeCoordMode, unionRange, variantFor } = require('./renderOptions');
+const { prepareOutput, publishPng, validatePng, acquireOutputLock } = require('./outputPaths');
+const { atomicWriteJson } = require('./jsonStore');
 
+function createRoutes({ config, EXPORT_DIR, sourcesStore, jobQueue, cache, exporter, analyzeRequest, openResultsFolder, openOutputFolder, ensurePlotReady }) {
 const router = express.Router();
 
 function httpErr(status, message) {
@@ -99,6 +94,8 @@ function applyRenderOptions(figures, coordMode) {
       }
       f.variant = variantFor(f, unified, mode);
       f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
+      f.output = cache.outputFor(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
+      f.inputSignature = cache.inputSignature(f);
       const file = cache.layerFileName(f.layer, f.variant);
       f.url = `/api/images/${f.sourceId}/${f.dataType}/${file}?taskId=${encodeURIComponent(f.taskId)}`;
     }
@@ -106,7 +103,7 @@ function applyRenderOptions(figures, coordMode) {
   return figures;
 }
 
-function pubFigure(f) {
+function pubFigure(f, jobId) {
   return {
     key: f.key,
     sourceId: f.sourceId,
@@ -117,7 +114,7 @@ function pubFigure(f) {
     dataTypeLabel: displayLabel(f.dataType),
     layer: f.layer,
     layerLabel: f.layerLabel || layerLabel(f.layer),
-    url: f.url,
+    url: jobId ? f.url + `${f.url.includes('?') ? '&' : '?'}jobId=${encodeURIComponent(jobId)}` : f.url,
     status: f.status,
     axes: f.axes || null,
     coordMode: f.coordMode || 'abs',
@@ -207,6 +204,19 @@ router.post('/sources/:id/refresh', (req, res) => {
   res.json(pubSource(sourcesStore.updateScan(s.id, scan)));
 });
 
+router.post('/sources/:id/relocate', (req, res, next) => {
+  try {
+    const source = sourcesStore.get(req.params.id);
+    if (!source) throw httpErr(404, '数据源不存在');
+    const target = req.body?.path;
+    if (typeof target !== 'string' || !path.isAbsolute(target)) throw httpErr(400, '请选择有效的绝对目录');
+    const scan = scanSource(target); if (!scan.ok) throw httpErr(400, scan.error);
+    const updated = { ...source, path: path.resolve(target), name: path.basename(target), scan, offline: false };
+    sourcesStore.replace(sourcesStore.list().map(item => item.id === source.id ? updated : item));
+    res.json(pubSource(updated));
+  } catch (error) { next(error); }
+});
+
 router.post('/sources/:id/open-results', async (req, res) => {
   try {
     const folder = await openResultsFolder(req.params.id, req.body.dataType || '', undefined, req.body.taskId);
@@ -223,7 +233,7 @@ router.post('/analysis', async (req, res) => {
 });
 
 // ---------- 绘图 ----------
-router.post('/plot', (req, res) => {
+router.post('/plot', async (req, res) => {
   try {
     const coordMode = (req.body.options && req.body.options.coordMode) || 'abs';
     const figures = applyRenderOptions(buildFigures(req.body.requests), coordMode);
@@ -237,26 +247,65 @@ router.post('/plot', (req, res) => {
     const pendingCount = figures.filter((f) => f.status === 'pending').length;
     let jobId = null;
     if (!dryRun && pendingCount > 0) {
+      await ensurePlotReady?.();
       jobId = jobQueue.create(figures).id;
     }
-    res.json({ jobId, figures: figures.map(pubFigure) });
+    res.json({ jobId, figures: figures.map(f => pubFigure(f)) });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) });
   }
 });
 
+function pubJob(job) { return { id: job.id, status: job.status, createdAt: job.createdAt, finishedAt: job.finishedAt,
+  total: job.total, done: job.done, failed: job.failed, cancelled: job.cancelled, counts: job.counts,
+  matlabVersion: job.matlabVersion || null, error: job.error, errorDetails: job.errorDetails, figures: job.figures.map(f => pubFigure(f, job.id)) }; }
+router.get('/jobs', (req, res) => res.json(jobQueue.list().map(pubJob)));
+function historyFigures(id) {
+  const job = jobQueue.get(id); if (!job) throw httpErr(404, '任务不存在');
+  const figures = job.figures.filter(f => ['done','cached'].includes(f.status) && f.output);
+  for (const f of figures) { prepareOutput(f.output); if (f.pngFile !== f.output.file || !fs.existsSync(f.pngFile)) throw httpErr(404, '任务的历史图片已丢失'); }
+  return figures;
+}
+router.post('/jobs/:id/export', async (req, res, next) => {
+  try {
+    const figures = historyFigures(req.params.id); if (!figures.length) throw httpErr(400, '没有可导出的成功图片');
+    const { zipId, done } = exporter.createZip(figures); await done;
+    res.json({ count: figures.length, url: `/api/export/${zipId}/download` });
+  } catch (error) { next(error); }
+});
+router.post('/jobs/:id/open-results', async (req, res, next) => {
+  try {
+    const figure = historyFigures(req.params.id).find(f => f.key === req.body.key);
+    if (!figure) throw httpErr(404, '没有对应的成功图片');
+    res.json({ ok: true, path: await openOutputFolder(figure.output) });
+  } catch (error) { next(error); }
+});
+router.post('/jobs/:id/cancel', (req, res, next) => { try { res.json(pubJob(jobQueue.cancel(req.params.id))); } catch (error) { next(error); } });
+router.post('/jobs/:id/retry', async (req, res, next) => {
+  try {
+    const previous = jobQueue.get(req.params.id); if (!previous) throw httpErr(404, '任务不存在');
+    if (!['partial', 'failed', 'cancelled', 'timed_out', 'interrupted'].includes(previous.status)) throw httpErr(409, '任务尚未结束或无需重试');
+    const retry = previous.figures.filter(f => !['done', 'cached'].includes(f.status));
+    const requests = retry.map(f => ({ sourceId: f.sourceId, taskId: f.taskId, dataType: f.dataType, layers: [f.layer] }));
+    const available = buildFigures(requests);
+    const figures = available.map(f => {
+      const old = retry.find(entry => entry.key === f.key);
+      for (const key of ['coordMode', 'xlim', 'ylim', 'variant']) if (old?.[key] !== undefined) f[key] = old[key];
+      f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
+      f.output = cache.outputFor(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
+      f.inputSignature = cache.inputSignature(f);
+      f.url = `/api/images/${f.sourceId}/${f.dataType}/${cache.layerFileName(f.layer, f.variant)}?taskId=${encodeURIComponent(f.taskId)}`;
+      return f;
+    });
+    if (!figures.length) throw httpErr(400, '原失败层的数据已不可用，请重新选择数据');
+    await ensurePlotReady?.();
+    res.json(pubJob(jobQueue.create(figures)));
+  } catch (error) { next(error); }
+});
 router.get('/jobs/:id', (req, res) => {
   const job = jobQueue.get(req.params.id);
   if (!job) return res.status(404).json({ error: '任务不存在' });
-  res.json({
-    id: job.id,
-    status: job.status,
-    total: job.total,
-    done: job.done,
-    failed: job.failed,
-    error: job.error,
-    figures: job.figures.map(pubFigure),
-  });
+  res.json(pubJob(job));
 });
 
 // 交互预览只读取 DEM,不会创建 MATLAB 任务。
@@ -291,11 +340,15 @@ router.post('/preview/save', (req, res) => {
     const base = cache.resultFileName(sourceId, dataType, layer, coordVariant, figure.taskId).slice(0, -4);
     const stamp = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 10);
     const name = `${base}_交互预览_色标${range[0]}至${range[1]}_${stamp}.png`;
-    const file = path.join(cache.resultsDir(sourceId, figure.taskId), dataType, name);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, bytes);
-    fs.writeFileSync(file + '.preview.json', JSON.stringify({ sourceId, taskId: figure.taskId, dataType, layer, range, coordMode: mode,
-      sampled: !!req.body.sampled, at: new Date().toISOString() }, null, 2));
+    validatePng(bytes);
+    const output = cache.outputFor(sourceId, dataType, layer, coordVariant, figure.taskId);
+    output.file = path.join(output.directory, name); prepareOutput(output); const file = output.file;
+    const lease = acquireOutputLock(file), temporary = path.join(output.directory, '.' + crypto.randomUUID() + '.tmp.png');
+    try {
+      fs.writeFileSync(temporary, bytes, { flag: 'wx' }); publishPng({ temporary, output });
+      atomicWriteJson(file + '.preview.json', { sourceId, taskId: figure.taskId, dataType, layer, range, coordMode: mode,
+        sampled: !!req.body.sampled, at: new Date().toISOString() }, { backup: false });
+    } finally { try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; } lease.release(true); }
     res.json({ ok: true, path: file });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -307,6 +360,13 @@ router.get('/images/:sourceId/:dataType/:file', (req, res) => {
   const { sourceId, dataType, file } = req.params;
   const parsed = cache.parseLayerFile(file);
   if (!parsed) return res.status(400).json({ error: `图片名不合法: ${file}` });
+  if (req.query.jobId) {
+    const historical = jobQueue.get(req.query.jobId)?.figures.find(f => f.sourceId === sourceId && f.taskId === req.query.taskId && f.dataType === dataType && f.layer === parsed.layer && (f.variant || '') === parsed.variant && ['done','cached'].includes(f.status));
+    if (!historical?.output) return res.status(404).json({ error: '没有此任务的成功图片记录' });
+    try { prepareOutput(historical.output); if (!fs.existsSync(historical.pngFile)) throw new Error('历史图片不存在'); }
+    catch (error) { return res.status(404).json({ error: error.message }); }
+    return req.query.download ? res.download(historical.pngFile, path.basename(historical.pngFile)) : res.sendFile(historical.pngFile);
+  }
   const source = sourcesStore.get(sourceId);
   if (!source) return res.status(404).json({ error: '数据源不存在' });
   let task;
@@ -359,9 +419,21 @@ router.post('/export', async (req, res) => {
 });
 
 router.get('/export/:zipId/download', (req, res) => {
+  if (!/^[0-9a-f-]{36}$/.test(req.params.zipId)) return res.status(400).json({ error: '导出标识无效' });
   const zipFile = path.join(EXPORT_DIR, `${req.params.zipId}.zip`);
   if (!fs.existsSync(zipFile)) return res.status(404).json({ error: '导出文件不存在' });
-  res.download(zipFile, `figures_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`);
+  const release = exporter.retain(zipFile); res.once('close',release);
+  res.download(zipFile, `figures_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`, error => { release(); if (error && !res.headersSent) res.status(500).json({ error:'导出文件读取失败' }); });
 });
 
-module.exports = router;
+return router;
+}
+let defaultRouter;
+module.exports = (...args) => {
+  if (!defaultRouter) defaultRouter = createRoutes({ config: require('./config').config, EXPORT_DIR: require('./config').EXPORT_DIR,
+    sourcesStore: require('./sourcesStore'), jobQueue: require('./jobQueue'), cache: require('./cache'), exporter: require('./exporter'),
+    analyzeRequest: require('./analysisService').analyzeRequest, openResultsFolder: require('./openResultsFolder').openResultsFolder,
+    openOutputFolder: require('./openResultsFolder').openOutputFolder });
+  return defaultRouter(...args);
+};
+module.exports.createRoutes = createRoutes;

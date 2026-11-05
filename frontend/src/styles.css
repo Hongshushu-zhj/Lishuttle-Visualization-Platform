@@ -173,3 +173,19 @@ body {
 .compare-cell__label b {
   color: #1f2328;
 }
+
+.el-dialog { max-width: calc(100vw - 24px); }
+.el-drawer { max-width: 100vw; }
+/* Transient notifications must not intercept the header controls beneath them. */
+.el-message { pointer-events: none; }
+.el-message .el-message__closeBtn { pointer-events: auto; }
+@media (max-width: 700px) {
+  .page { padding: 12px 10px 28px; }
+  .figure-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-header__right { width: 100%; gap: 8px !important; }
+  .app-header__title { font-size: 15px !important; }
+  .el-dialog { margin-top: 5vh; }
+  .preset-row { flex-wrap: wrap; }
+  .src-section .sec-head, .ctrl-head { flex-wrap: wrap; }
+  .side-card { position: static !important; margin-bottom: 12px; }
+}

@@ -156,6 +156,7 @@ end
 % 输出本图实际使用的坐标范围,便于核对"同一批图是否统一范围"
 curX = xlim(gca);  curY = ylim(gca);
 fprintf('AXES %d %.6f %.6f %.6f %.6f\n', figIndex, curX(1), curX(2), curY(1), curY(2));
+prepare_export_figure(gcf);
 exportgraphics(gcf, outFile, 'Resolution', 150);
 close(gcf);
 end
