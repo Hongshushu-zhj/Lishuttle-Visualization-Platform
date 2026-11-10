@@ -7,7 +7,7 @@ const { resolveRaster } = require('./rasterData');
 const crypto = require('crypto');
 const { listDrives, listDir } = require('./fsBrowse');
 const { GROUND_LAYER, typeInfo, displayLabel, layerLabel } = require('./plotTypes');
-const { normalizeCoordMode, unionRange, variantFor } = require('./renderOptions');
+const { normalizeCoordMode, unionRange, variantFor, indoorViewOptions } = require('./renderOptions');
 const { prepareOutput, publishPng, validatePng, acquireOutputLock } = require('./outputPaths');
 const { atomicWriteJson } = require('./jsonStore');
 
@@ -86,9 +86,12 @@ function applyRenderOptions(figures, coordMode) {
   }
   for (const group of groups.values()) {
     const unified = unionRange(group);
+    const indoorView = group[0].indoor ? indoorViewOptions(group) : null;
     for (const f of group) {
       f.coordMode = mode;
-      if (unified) {
+      if (indoorView) {
+        Object.assign(f, indoorView);
+      } else if (unified) {
         f.xlim = [unified.left, unified.right];
         f.ylim = [unified.bottom, unified.top];
       }
@@ -120,6 +123,8 @@ function pubFigure(f, jobId) {
     coordMode: f.coordMode || 'abs',
     xlim: f.xlim || null,
     ylim: f.ylim || null,
+    coordBounds: f.coordBounds || null,
+    renderPolicy: f.renderPolicy || null,
     error: f.error || null,
   };
 }
@@ -290,7 +295,7 @@ router.post('/jobs/:id/retry', async (req, res, next) => {
     const available = buildFigures(requests);
     const figures = available.map(f => {
       const old = retry.find(entry => entry.key === f.key);
-      for (const key of ['coordMode', 'xlim', 'ylim', 'variant']) if (old?.[key] !== undefined) f[key] = old[key];
+      for (const key of ['coordMode', 'xlim', 'ylim', 'variant', 'coordBounds', 'renderPolicy']) if (old?.[key] !== undefined) f[key] = old[key];
       f.pngFile = cache.pngPath(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
       f.output = cache.outputFor(f.sourceId, f.dataType, f.layer, f.variant, f.taskId);
       f.inputSignature = cache.inputSignature(f);
