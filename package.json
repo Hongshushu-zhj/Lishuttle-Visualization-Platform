@@ -1,0 +1,7 @@
+{
+  "name": "antenna-draw-web",
+  "private": true,
+  "scripts": {
+    "test:baseline": "node scripts/baseline.cjs"
+  }
+}

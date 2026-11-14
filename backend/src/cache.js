@@ -50,7 +50,8 @@ function resultFileName(sourceId, dataType, layer, variant = '', taskId) {
   const mode = variant.includes('rel-center') ? '相对坐标-区域中心'
     : variant.includes('rel-ll') ? '相对坐标-左下角' : '绝对坐标';
   const range = variant.match(/(?:^|_)(u[0-9a-f]+)(?:_|$)/);
-  const name = `${source.name}_${task.name}_${dataType}_${label}_${mode}${range ? `_对比范围-${range[1].slice(1)}` : ''}.png`;
+  const indoorPolicy = variant.match(/^ip1_([0-9a-f]{16})(?:_|$)/);
+  const name = `${source.name}_${task.name}_${dataType}_${label}_${mode}${range ? `_对比范围-${range[1].slice(1)}` : ''}${indoorPolicy ? `_ip1-${indoorPolicy[1]}` : ''}.png`;
   return name.replace(/[<>:"/\\\\|?*\x00-\x1f]/g, '_');
 }
 

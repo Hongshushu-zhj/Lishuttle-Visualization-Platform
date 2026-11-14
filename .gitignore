@@ -42,6 +42,7 @@ backend/src/native/*.manifest.json
 # 保留可复现的功能对齐设计、实施和验收记录
 !/docs/
 /docs/*
+!/docs/indoor-plot-padding.md
 !/docs/superpowers/
 /docs/superpowers/*
 !/docs/superpowers/specs/
