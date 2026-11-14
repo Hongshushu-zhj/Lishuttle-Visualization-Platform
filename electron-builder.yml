@@ -25,6 +25,7 @@ extraResources:
     to: matlab
     filter:
       - '*.m'
+      - '!verify_*.m'
   - from: .desktop-build/demo
     to: demo
   - from: .desktop-build/build-info.json

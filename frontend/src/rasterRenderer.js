@@ -87,7 +87,16 @@ export function createRasterPainter(preview, useGpu = true) {
   };
 }
 
+export function rasterExtent(preview) {
+  const extent = preview.extent;
+  if (!extent || ![extent.left, extent.right, extent.bottom, extent.top].every(Number.isFinite) || extent.right <= extent.left || extent.top <= extent.bottom) {
+    throw new Error('预览栅格坐标范围无效，请刷新后重试');
+  }
+  return extent;
+}
+
 export function drawPreview(canvas, painter, preview, figure, range) {
+  const e = rasterExtent(preview);
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
@@ -103,7 +112,6 @@ export function drawPreview(canvas, painter, preview, figure, range) {
   ctx.font = '14px "Microsoft YaHei", sans-serif';
   ctx.fillText(`交互预览 · 色标 ${range[0]} ～ ${range[1]} ${preview.unit}${preview.sampled ? ' · 已采样' : ''}`, W / 2, 56);
   ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, width, height); ctx.clip();
-  const e = preview.extent;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(painter.paint(range), x(e.left), y(e.top), (e.right - e.left) * scale, (e.top - e.bottom) * scale);
   ctx.lineWidth = 1.2; ctx.strokeStyle = '#333';
@@ -122,7 +130,10 @@ export function drawPreview(canvas, painter, preview, figure, range) {
   }
   ctx.restore(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, width, height);
   const mode = figure.coordMode || 'abs';
-  const origin = mode === 'rel-ll' ? [left, bottom] : mode === 'rel-center' ? [(left + right) / 2, (bottom + top) / 2] : [0, 0];
+  const c = figure.coordBounds;
+  const basis = c && [c.left, c.right, c.bottom, c.top].every(Number.isFinite) && c.right > c.left && c.top > c.bottom
+    ? c : { left, right, bottom, top };
+  const origin = mode === 'rel-ll' ? [basis.left, basis.bottom] : mode === 'rel-center' ? [(basis.left + basis.right) / 2, (basis.bottom + basis.top) / 2] : [0, 0];
   const fmt = (value) => Number(value.toFixed(2)).toString();
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#333';
   for (let i = 0; i <= 4; i++) {

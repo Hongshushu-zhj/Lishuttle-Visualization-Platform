@@ -45,7 +45,9 @@ async function applyGlobal() {
   catch (e) { ElMessage.error(e.message); }
 }
 watch(globalRange, (value) => { if (value && preview.value) setRange(value); }, { deep: true });
-watch(() => [props.fig.coordMode, props.fig.xlim, props.fig.ylim], schedule, { deep: true });
+watch(() => [props.fig.coordMode, props.fig.xlim, props.fig.ylim, props.fig.coordBounds], () => {
+  resizeCanvas(); schedule();
+}, { deep: true, flush: 'post' });
 const preview = ref(null), canvas = ref(null), loading = ref(true), saving = ref(false), error = ref('');
 const range = ref([0, 1]), lower = ref(0), upper = ref(1);
 let painter = null, frame = null, disposed = false;
@@ -55,6 +57,13 @@ function redraw() {
   if (!canvas.value || !painter || disposed) return;
   try { drawPreview(canvas.value, painter, preview.value, props.fig, range.value); }
   catch (e) { error.value = e.message; }
+}
+function resizeCanvas() {
+  if (!canvas.value || !preview.value) return;
+  const b = preview.value.bounds;
+  const [left, right] = props.fig.xlim || [b.left, b.right];
+  const [bottom, top] = props.fig.ylim || [b.bottom, b.top];
+  canvas.value.height = Math.round(Math.max(360, Math.min(1000, 190 + 950 * (top - bottom) / (right - left))));
 }
 function schedule() {
   if (frame) cancelAnimationFrame(frame);
@@ -99,9 +108,7 @@ onMounted(async () => {
     range.value = [...(globalRange.value || result.defaultRange)]; [lower.value, upper.value] = range.value;
     await nextTick();
     if (disposed) return;
-    const [left, right] = props.fig.xlim || [result.bounds.left, result.bounds.right];
-    const [bottom, top] = props.fig.ylim || [result.bounds.bottom, result.bounds.top];
-    canvas.value.height = Math.round(Math.max(360, Math.min(1000, 190 + 950 * (top - bottom) / (right - left))));
+    resizeCanvas();
     painter = createRasterPainter(result, !props.compact); redraw();
   } catch (e) { if (!disposed) error.value = e.message; }
   finally { loading.value = false; }

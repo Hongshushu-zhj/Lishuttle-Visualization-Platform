@@ -146,7 +146,9 @@ if isfield(fig, 'coordMode') && ~isempty(fig.coordMode)
 end
 if ~strcmp(coordMode, 'abs')
     isIndoor = isfield(fig, 'indoor') && logical(fig.indoor);
-    applyRelativeTicks(ax, coordMode, isIndoor);
+    coordBounds = [];
+    if isIndoor && isfield(fig, 'coordBounds'), coordBounds = fig.coordBounds; end
+    applyRelativeTicks(ax, coordMode, isIndoor, coordBounds);
 end
 
 outDir = fileparts(outFile);
@@ -162,7 +164,7 @@ close(gcf);
 end
 
 % ------------------------------------------------------------------
-function applyRelativeTicks(ax, mode, isIndoor)
+function applyRelativeTicks(ax, mode, isIndoor, coordBounds)
 % 把刻度标签改写成相对坐标(原点取区域左下角或中心),并在坐标轴标题里注明原点,
 % 便于报告阅读;轴范围本身保持绝对值不变(不影响与 GIS/工参叠加的几何关系)。
 % 注意:标签含中文,必须用支持中文的字体,否则会渲染成方框。
@@ -174,12 +176,20 @@ if isIndoor
     coordName = '局部坐标';
 end
 xl = xlim(ax);  yl = ylim(ax);
+originX = xl; originY = yl;
+if nargin >= 4 && isstruct(coordBounds) && isscalar(coordBounds) && ...
+        all(isfield(coordBounds, {'left', 'right', 'bottom', 'top'}))
+    values = [coordBounds.left coordBounds.right coordBounds.bottom coordBounds.top];
+    if numel(values) == 4 && all(isfinite(values)) && values(2) > values(1) && values(4) > values(3)
+        originX = values(1:2); originY = values(3:4);
+    end
+end
 switch mode
     case 'rel-ll'      % 相对左下角
-        ox = xl(1);  oy = yl(1);
+        ox = originX(1);  oy = originY(1);
         originText = sprintf('原点=左下角 %s(%.0f, %.0f)', coordName, ox, oy);
     case 'rel-center'  % 相对中心
-        ox = mean(xl);  oy = mean(yl);
+        ox = mean(originX);  oy = mean(originY);
         originText = sprintf('原点=中心 %s(%.0f, %.0f)', coordName, ox, oy);
     otherwise
         return;

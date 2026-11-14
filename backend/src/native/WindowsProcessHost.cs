@@ -12,8 +12,8 @@ using System.Reflection;
 [assembly: AssemblyTitle("AntennaDraw Windows Process Host")]
 [assembly: AssemblyDescription("Owns and cleans up only AntennaDraw MATLAB job processes")]
 [assembly: AssemblyProduct("AntennaDraw")]
-[assembly: AssemblyVersion("1.0.1.0")]
-[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyVersion("1.0.2.0")]
+[assembly: AssemblyFileVersion("1.0.2.0")]
 
 // Windows 11: private job, no breakaway; associate at CreateProcess time.
 // References: Microsoft Learn Job Objects, UpdateProcThreadAttribute,

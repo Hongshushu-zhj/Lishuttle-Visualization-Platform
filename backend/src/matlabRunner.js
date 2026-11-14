@@ -25,7 +25,8 @@ function createMatlabRunner({ config, JOBS_DIR, MATLAB_DIR, supervisor, cache })
     const taskFigures = figures.map(f => ({ preddir: f.preddir, taskName: f.taskName || '', dataType: f.dataType,
       layer: f.layer === GROUND_LAYER ? '' : f.layer, layerLabel: f.layerLabel || '', outFile: f.temporary,
       indoor: !!f.indoor, demFile: f.demFile, wallFile: f.wallsFile || '', bounds: f.bounds || null,
-      xlim: f.xlim || null, ylim: f.ylim || null, coordMode: f.coordMode || 'abs' }));
+      xlim: f.xlim || null, ylim: f.ylim || null, coordMode: f.coordMode || 'abs',
+      coordBounds: f.coordBounds || null, renderPolicy: f.renderPolicy || null }));
     fs.writeFileSync(jobFile, JSON.stringify({ figures: taskFigures }));
     const code = `fprintf('ANTENNA_MATLAB_VERSION %s\\n',version); addpath('${matlabString(MATLAB_DIR)}'); plot_dispatch('${matlabString(jobFile)}');`;
     let buffer = '', sawDone = false, protocolError;
